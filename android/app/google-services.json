@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "834074426474",
+    "project_id": "egatepass-b9da7",
+    "storage_bucket": "egatepass-b9da7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834074426474:android:c59731f5abecfa364f5e13",
+        "android_client_info": {
+          "package_name": "com.example.e_gatepass"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdTVTslEnzBwsOGNvAd1dw7JZGE7mEG2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834074426474:android:93420fdf9278880e4f5e13",
+        "android_client_info": {
+          "package_name": "com.example.gate_pass_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdTVTslEnzBwsOGNvAd1dw7JZGE7mEG2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

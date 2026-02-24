@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Keep auth-gated rules simple while the app is in active development.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /staff_invites/{inviteId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /classrooms/{classroomId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /classroom_members/{memberId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
