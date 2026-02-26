@@ -8,8 +8,12 @@ class AppRoles {
 }
 
 class HodType {
-  static const String firstYear = 'First Year HOD';
-  static const String senior = 'Senior Department HOD';
+  static const String firstYear = '1st Year HOD';
+  static const String senior = 'Senior HOD';
+
+  // Legacy values retained for existing accounts created before label update.
+  static const String firstYearLegacy = 'First Year HOD';
+  static const String seniorLegacy = 'Senior Department HOD';
 
   static const List<String> all = <String>[firstYear, senior];
 }
@@ -39,13 +43,38 @@ class PassType {
 
 const List<String> departments = <String>['AI&DS', 'CSC', 'ECE', 'EEE', 'MECH'];
 
-const List<String> classYears = <String>['I Year', 'II Year', 'III Year', 'IV Year'];
+const List<String> classYears = <String>[
+  'I Year',
+  'II Year',
+  'III Year',
+  'IV Year',
+];
 
-const List<String> classSections = <String>['I Year', 'II Year', 'III Year', 'IV Year'];
+const List<String> classSections = <String>[
+  'I Year',
+  'II Year',
+  'III Year',
+  'IV Year',
+];
 
 String roleDisplayName(String role) {
   if (role == AppRoles.teacher) {
     return 'Class Incharge';
   }
   return role;
+}
+
+bool isFirstYearHod(String? hodType) {
+  return hodType == HodType.firstYear || hodType == HodType.firstYearLegacy;
+}
+
+bool isSeniorHod(String? hodType) {
+  return hodType == HodType.senior || hodType == HodType.seniorLegacy;
+}
+
+String hodTypeDisplayName(String? hodType) {
+  if (isFirstYearHod(hodType)) {
+    return HodType.firstYear;
+  }
+  return HodType.senior;
 }

@@ -30,8 +30,6 @@ class HodDashboard extends StatefulWidget {
 }
 
 class _HodDashboardState extends State<HodDashboard> {
-  static const List<String> _defaultSections = <String>['A', 'B', 'C'];
-
   bool _loading = true;
   String? _errorMessage;
   List<Classroom> _classrooms = <Classroom>[];
@@ -46,15 +44,6 @@ class _HodDashboardState extends State<HodDashboard> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      try {
-        await _ensureDefaultClasses();
-      } catch (error) {
-        if (mounted) {
-          setState(
-            () => _errorMessage = 'Class Creation Error: ${error.toString()}',
-          );
-        }
-      }
       String? fetchError;
 
       try {
@@ -96,33 +85,95 @@ class _HodDashboardState extends State<HodDashboard> {
     }
   }
 
-  Future<void> _ensureDefaultClasses() async {
-    final existing = await widget.classroomService.fetchClassroomsForHod(
-      widget.user.id,
-    );
-    final existingSections = existing
-        .map((room) => room.section.trim().toUpperCase())
-        .toSet();
+  List<String> get _allowedYears {
+    if (isFirstYearHod(widget.user.hodType)) {
+      return <String>[classYears.first];
+    }
+    return <String>['II Year', 'III Year', 'IV Year'];
+  }
 
-    final years = widget.user.hodType == HodType.firstYear
-        ? <String>[classYears.first]
-        : <String>['II Year', 'III Year', 'IV Year'];
-
-    for (final year in years) {
-      for (final section in _defaultSections) {
-        final sectionName = '$year - ${widget.user.department} - $section'
-            .trim()
-            .toUpperCase();
-        if (existingSections.contains(sectionName)) {
-          continue;
-        }
-        await widget.classroomService.createClassroomByHod(
-          hod: widget.user,
-          year: year,
-          department: widget.user.department,
-          sectionSuffix: section,
+  Future<void> _createClassroom() async {
+    String selectedYear = _allowedYears.first;
+    final shouldCreate = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: const Text('Create Class'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  DropdownButtonFormField<String>(
+                    value: selectedYear,
+                    decoration: const InputDecoration(
+                      labelText: 'Year',
+                      prefixIcon: Icon(Icons.calendar_view_month_outlined),
+                    ),
+                    items: _allowedYears.map((year) {
+                      return DropdownMenuItem<String>(
+                        value: year,
+                        child: Text(year),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setModalState(() => selectedYear = value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    initialValue: widget.user.department,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Department',
+                      prefixIcon: Icon(Icons.apartment_outlined),
+                    ),
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
         );
+      },
+    );
+
+    if (shouldCreate != true) {
+      return;
+    }
+
+    try {
+      await widget.classroomService.createClassroomByHod(
+        hod: widget.user,
+        year: selectedYear,
+        department: widget.user.department,
+      );
+      await _loadData();
+      if (!mounted) {
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Class created successfully.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -207,6 +258,7 @@ class _HodDashboardState extends State<HodDashboard> {
   }
 
   Future<void> _openClassroomDetails(Classroom room) async {
+    final pageContext = context;
     final status = room.teacherId.isEmpty
         ? 'Staff not assigned yet'
         : 'Assigned to ${room.teacherName}';
@@ -216,7 +268,7 @@ class _HodDashboardState extends State<HodDashboard> {
 
     await showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: Text(room.section),
           content: SingleChildScrollView(
@@ -224,6 +276,7 @@ class _HodDashboardState extends State<HodDashboard> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 SelectableText(
+                  'Class ID: ${room.id}\n'
                   'Status: $status\n'
                   'Staff Join Code: ${room.staffCode}\n'
                   'Staff Join Link: $staffJoinLink\n'
@@ -238,7 +291,45 @@ class _HodDashboardState extends State<HodDashboard> {
           actions: <Widget>[
             TextButton(
               onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
+                final shouldDelete = await showDialog<bool>(
+                  context: dialogContext,
+                  builder: (confirmContext) {
+                    return AlertDialog(
+                      title: const Text('Delete Class'),
+                      content: Text(
+                        'Delete ${room.section}?\n\nThis will remove all student memberships of this class.',
+                      ),
+                      actions: <Widget>[
+                        TextButton(
+                          onPressed: () => Navigator.pop(confirmContext, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(confirmContext, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+
+                if (shouldDelete != true) {
+                  return;
+                }
+
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+                await _deleteClassroom(room);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              child: const Text('Delete'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(pageContext);
                 await Clipboard.setData(ClipboardData(text: room.staffCode));
                 if (!mounted) {
                   return;
@@ -251,7 +342,7 @@ class _HodDashboardState extends State<HodDashboard> {
             ),
             TextButton(
               onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
+                final messenger = ScaffoldMessenger.of(pageContext);
                 await Clipboard.setData(ClipboardData(text: staffJoinLink));
                 if (!mounted) {
                   return;
@@ -264,7 +355,7 @@ class _HodDashboardState extends State<HodDashboard> {
             ),
             ElevatedButton(
               onPressed: () async {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 await _inviteStaff(room);
               },
               child: const Text('Add Staff'),
@@ -273,6 +364,61 @@ class _HodDashboardState extends State<HodDashboard> {
         );
       },
     );
+  }
+
+  Future<void> _deleteClassroom(Classroom room) async {
+    try {
+      await widget.classroomService.deleteClassroomByHod(
+        hod: widget.user,
+        classroomId: room.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      await _loadData();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Class deleted successfully.')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _confirmDeleteClassroom(Classroom room) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (confirmContext) {
+        return AlertDialog(
+          title: const Text('Delete Class'),
+          content: Text(
+            'Delete ${room.section}?\n\nThis will remove all student memberships of this class.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(confirmContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(confirmContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) {
+      return;
+    }
+    await _deleteClassroom(room);
   }
 
   Future<void> _reviewRequest({
@@ -360,7 +506,7 @@ class _HodDashboardState extends State<HodDashboard> {
               Text('Role: ${widget.user.role}'),
               Text('Email: ${widget.user.email}'),
               Text('Department: ${widget.user.department}'),
-              Text('HOD Type: ${widget.user.hodType ?? HodType.senior}'),
+              Text('HOD Type: ${hodTypeDisplayName(widget.user.hodType)}'),
             ],
           ),
         );
@@ -410,6 +556,11 @@ class _HodDashboardState extends State<HodDashboard> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.large(
+        onPressed: _createClassroom,
+        tooltip: 'Create Class',
+        child: const Icon(Icons.add, size: 40),
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadData,
@@ -420,11 +571,13 @@ class _HodDashboardState extends State<HodDashboard> {
                 child: ListTile(
                   leading: const Icon(Icons.school_outlined),
                   title: Text(
-                    widget.user.hodType == HodType.firstYear
-                        ? 'Default: I Year A, B, C Classes'
-                        : 'Default: II, III, IV Year (A, B, C) Classes',
+                    isFirstYearHod(widget.user.hodType)
+                        ? 'Create classes for I Year'
+                        : 'Create classes for II, III, IV Year',
                   ),
-                  subtitle: Text('Department: ${widget.user.department}'),
+                  subtitle: Text(
+                    'Department: ${widget.user.department}\nUse + button to create classes.',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -438,7 +591,7 @@ class _HodDashboardState extends State<HodDashboard> {
                     padding: const EdgeInsets.all(14),
                     child: Text(
                       _errorMessage ??
-                          'No classes found. Pull to refresh or check HOD registration type.',
+                          'No classes found. Tap + to create your first class.',
                       style: TextStyle(
                         color: _errorMessage != null ? Colors.red : null,
                         fontWeight: _errorMessage != null
@@ -457,11 +610,24 @@ class _HodDashboardState extends State<HodDashboard> {
                         title: Text(room.section),
                         subtitle: Text(
                           room.teacherId.isEmpty
-                              ? 'Staff pending | code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}'
-                              : 'Assigned: ${room.teacherName} | code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}',
+                              ? 'Class ID: ${room.id}\nStaff code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}'
+                              : 'Class ID: ${room.id}\nAssigned: ${room.teacherName}\nStaff code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}',
                         ),
                         isThreeLine: true,
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            IconButton(
+                              tooltip: 'Delete class',
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              onPressed: () => _confirmDeleteClassroom(room),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () => _openClassroomDetails(room),
                       ),
                     ),

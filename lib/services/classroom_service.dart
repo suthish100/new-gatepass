@@ -353,6 +353,9 @@ class ClassroomService {
           'This class is already assigned to another staff.',
         );
       }
+      if (room.teacherId == staff.id) {
+        return room;
+      }
 
       var studentCode = room.studentCode;
       var inviteLink = room.inviteLink;
@@ -389,6 +392,9 @@ class ClassroomService {
       throw ClassroomException(
         'This class is already assigned to another staff.',
       );
+    }
+    if (room.teacherId == staff.id) {
+      return room;
     }
 
     var studentCode = room.studentCode;
@@ -590,10 +596,10 @@ class ClassroomService {
     String? sectionSuffix,
   }) async {
     final existing = await fetchClassroomsForHod(hod.id);
-    final isFirstYearHod = hod.hodType == HodType.firstYear;
+    final isFirstYearHodType = isFirstYearHod(hod.hodType);
     final normalizedSuffix = sectionSuffix?.trim().toUpperCase() ?? '';
 
-    if (isFirstYearHod) {
+    if (isFirstYearHodType) {
       if (year != classYears.first) {
         throw ClassroomException(
           'First year HOD can create only I Year class.',

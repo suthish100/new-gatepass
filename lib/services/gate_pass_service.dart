@@ -79,25 +79,26 @@ class GatePassService {
 
   Future<void> _ensureNoActivePass({required String studentId}) async {
     if (FirebaseBootstrap.isReady) {
-      final pendingTeacherSnap = await _firestore
+      final snapshot = await _firestore
           .collection('gate_pass_requests')
           .where('studentId', isEqualTo: studentId)
-          .where('status', isEqualTo: RequestStatus.pendingTeacher)
-          .limit(1)
           .get();
-      if (pendingTeacherSnap.docs.isNotEmpty) {
+      final hasPendingTeacher = snapshot.docs.any((doc) {
+        return (doc.data()['status'] as String? ?? '') ==
+            RequestStatus.pendingTeacher;
+      });
+      if (hasPendingTeacher) {
         throw GatePassException(
           'You already have a pending pass request awaiting Class Incharge approval. '
           'Please wait for it to be processed before creating a new one.',
         );
       }
-      final pendingHodSnap = await _firestore
-          .collection('gate_pass_requests')
-          .where('studentId', isEqualTo: studentId)
-          .where('status', isEqualTo: RequestStatus.forwardedToHod)
-          .limit(1)
-          .get();
-      if (pendingHodSnap.docs.isNotEmpty) {
+
+      final hasPendingHod = snapshot.docs.any((doc) {
+        return (doc.data()['status'] as String? ?? '') ==
+            RequestStatus.forwardedToHod;
+      });
+      if (hasPendingHod) {
         throw GatePassException(
           'You already have a pass request awaiting HOD approval. '
           'Please wait for it to be processed before creating a new one.',
@@ -125,15 +126,17 @@ class GatePassService {
       final snapshot = await _firestore
           .collection('gate_pass_requests')
           .where('studentId', isEqualTo: studentId)
-          .orderBy('createdAt', descending: true)
           .get();
-
-      return snapshot.docs.map((doc) {
-        return GatePassRequest.fromMap(doc.data(), doc.id);
-      }).toList();
+      final requests = snapshot.docs
+          .map((doc) => GatePassRequest.fromMap(doc.data(), doc.id))
+          .toList();
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return requests;
     }
 
-    return _localRequests.where((request) => request.studentId == studentId).toList()
+    return _localRequests
+        .where((request) => request.studentId == studentId)
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
@@ -159,23 +162,27 @@ class GatePassService {
     bool onlyOpen = false,
   }) async {
     if (FirebaseBootstrap.isReady) {
-      Query<Map<String, dynamic>> query = _firestore
+      final snapshot = await _firestore
           .collection('gate_pass_requests')
           .where('teacherId', isEqualTo: teacherId)
-          .orderBy('createdAt', descending: true);
-      if (onlyOpen) {
-        query = query.where('status', isEqualTo: RequestStatus.pendingTeacher);
-      }
-
-      final snapshot = await query.get();
-      return snapshot.docs
+          .get();
+      final requests = snapshot.docs
           .map((doc) => GatePassRequest.fromMap(doc.data(), doc.id))
+          .where(
+            (request) =>
+                !onlyOpen || request.status == RequestStatus.pendingTeacher,
+          )
           .toList();
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return requests;
     }
 
     return _localRequests
         .where((request) => request.teacherId == teacherId)
-        .where((request) => !onlyOpen || request.status == RequestStatus.pendingTeacher)
+        .where(
+          (request) =>
+              !onlyOpen || request.status == RequestStatus.pendingTeacher,
+        )
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -185,23 +192,27 @@ class GatePassService {
     bool onlyOpen = false,
   }) async {
     if (FirebaseBootstrap.isReady) {
-      Query<Map<String, dynamic>> query = _firestore
+      final snapshot = await _firestore
           .collection('gate_pass_requests')
           .where('hodId', isEqualTo: hodId)
-          .orderBy('createdAt', descending: true);
-      if (onlyOpen) {
-        query = query.where('status', isEqualTo: RequestStatus.forwardedToHod);
-      }
-
-      final snapshot = await query.get();
-      return snapshot.docs
+          .get();
+      final requests = snapshot.docs
           .map((doc) => GatePassRequest.fromMap(doc.data(), doc.id))
+          .where(
+            (request) =>
+                !onlyOpen || request.status == RequestStatus.forwardedToHod,
+          )
           .toList();
+      requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return requests;
     }
 
     return _localRequests
         .where((request) => request.hodId == hodId)
-        .where((request) => !onlyOpen || request.status == RequestStatus.forwardedToHod)
+        .where(
+          (request) =>
+              !onlyOpen || request.status == RequestStatus.forwardedToHod,
+        )
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -219,7 +230,9 @@ class GatePassService {
       throw GatePassException('This request is not assigned to your class.');
     }
     if (request.status != RequestStatus.pendingTeacher) {
-      throw GatePassException('Request is already processed by class incharge.');
+      throw GatePassException(
+        'Request is already processed by class incharge.',
+      );
     }
 
     final nextStatus = approve
@@ -244,13 +257,17 @@ class GatePassService {
       throw GatePassException('Only HOD can give final approval.');
     }
     if (request.hodId != hod.id) {
-      throw GatePassException('This request is not assigned to your dashboard.');
+      throw GatePassException(
+        'This request is not assigned to your dashboard.',
+      );
     }
     if (request.status != RequestStatus.forwardedToHod) {
       throw GatePassException('Request is not waiting for HOD approval.');
     }
 
-    final nextStatus = approve ? RequestStatus.approved : RequestStatus.rejectedByHod;
+    final nextStatus = approve
+        ? RequestStatus.approved
+        : RequestStatus.rejectedByHod;
     await _updateRequestStatus(
       requestId: request.id,
       status: nextStatus,
@@ -288,11 +305,16 @@ class GatePassService {
         patch['approvedAt'] = Timestamp.fromDate(approvedAt);
       }
 
-      await _firestore.collection('gate_pass_requests').doc(requestId).update(patch);
+      await _firestore
+          .collection('gate_pass_requests')
+          .doc(requestId)
+          .update(patch);
       return;
     }
 
-    final index = _localRequests.indexWhere((request) => request.id == requestId);
+    final index = _localRequests.indexWhere(
+      (request) => request.id == requestId,
+    );
     if (index == -1) return;
     _localRequests[index] = _localRequests[index].copyWith(
       status: status,

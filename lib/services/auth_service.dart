@@ -123,19 +123,20 @@ class AuthService {
       final snapshot = await _firestore
           .collection('users')
           .where('department', isEqualTo: department)
-          .where('role', isEqualTo: 'Student')
           .get();
-      return snapshot.docs.map((
-        QueryDocumentSnapshot<Map<String, dynamic>> doc,
-      ) {
-        return AppUser.fromMap(doc.data(), doc.id);
-      }).toList();
+      return snapshot.docs
+          .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+            return AppUser.fromMap(doc.data(), doc.id);
+          })
+          .where((user) => user.role == AppRoles.student)
+          .toList();
     }
 
     return _localUsers.values
         .map((record) => record.user)
         .where(
-          (user) => user.role == 'Student' && user.department == department,
+          (user) =>
+              user.role == AppRoles.student && user.department == department,
         )
         .toList();
   }

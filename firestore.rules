@@ -2,28 +2,45 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function hasUserDoc() {
+      return isSignedIn() && exists(userPath());
+    }
+
     function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return get(userPath());
     }
 
     function userRole() {
-      return userDoc().data.role;
+      return hasUserDoc() && userDoc().data.role is string
+        ? userDoc().data.role
+        : '';
     }
 
     function isHod() {
-      return isSignedIn() && userRole() == 'HOD';
+      return isSignedIn() && (userRole() == 'HOD' || userRole() == 'hod');
     }
 
     function isTeacher() {
-      return isSignedIn() && userRole() == 'Teacher';
+      return isSignedIn() &&
+        (
+          userRole() == 'Teacher' ||
+          userRole() == 'teacher' ||
+          userRole() == 'Staff' ||
+          userRole() == 'staff'
+        );
     }
 
     function isStudent() {
-      return isSignedIn() && userRole() == 'Student';
+      return isSignedIn() &&
+        (userRole() == 'Student' || userRole() == 'student');
     }
 
     match /users/{userId} {
@@ -43,21 +60,20 @@ service cloud.firestore {
       allow update: if
         (isHod() && resource.data.hodId == request.auth.uid) ||
         (
-          isTeacher() &&
-          resource.data.teacherId == '' &&
+          isSignedIn() &&
+          (resource.data.teacherId == '' || resource.data.teacherId == request.auth.uid) &&
           request.resource.data.teacherId == request.auth.uid &&
           request.resource.data.hodId == resource.data.hodId &&
-          request.resource.data.staffCode == resource.data.staffCode &&
-          request.resource.data.department == resource.data.department &&
-          request.resource.data.year == resource.data.year &&
-          request.resource.data.section == resource.data.section
+          request.resource.data.staffCode == resource.data.staffCode
         );
       allow delete: if isHod() && resource.data.hodId == request.auth.uid;
     }
 
     match /classroom_members/{memberId} {
       allow read: if isSignedIn();
-      allow create: if isStudent();
+      allow create: if
+        isSignedIn() &&
+        request.resource.data.studentId == request.auth.uid;
       allow delete: if isHod() || isTeacher();
       allow update: if false;
     }
