@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants.dart';
 import '../../models/app_user.dart';
 import '../../models/classroom.dart';
+import '../../models/gate_pass_request.dart';
 import '../../services/classroom_service.dart';
+import '../../services/gate_pass_service.dart';
+import '../widgets/join_class_shortcut_box.dart';
+import '../widgets/pass_status_card.dart';
+import 'approved_pass_screen.dart';
+import 'create_pass_screen.dart';
+import 'join_class_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({
     super.key,
     required this.user,
     required this.classroomService,
+    required this.gatePassService,
     required this.onLogout,
   });
 
   final AppUser user;
   final ClassroomService classroomService;
+  final GatePassService gatePassService;
   final VoidCallback onLogout;
 
   @override
@@ -23,89 +33,178 @@ class StudentDashboard extends StatefulWidget {
 
 class _StudentDashboardState extends State<StudentDashboard> {
   bool _loading = true;
+  int _tabIndex = 0;
   List<Classroom> _joinedClassrooms = <Classroom>[];
+  List<GatePassRequest> _requests = <GatePassRequest>[];
 
   @override
   void initState() {
     super.initState();
-    _loadClassrooms();
+    _loadData();
   }
 
-  Future<void> _loadClassrooms() async {
+  Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      _joinedClassrooms = await widget.classroomService
+      final classrooms = await widget.classroomService
           .fetchClassroomsForStudent(widget.user.id);
+      final requests = await widget.gatePassService.fetchStudentRequests(
+        widget.user.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _joinedClassrooms = classrooms;
+        _requests = requests;
+      });
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _joinClass() async {
-    final controller = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Join Class'),
-          content: TextField(
-            controller: controller,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              hintText: 'Enter unique class joining code',
-              prefixIcon: Icon(Icons.pin_outlined),
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final code = controller.text.trim();
-                Navigator.pop(context);
-                await _joinUsingCode(code);
-              },
-              child: const Text('Join'),
-            ),
-          ],
-        );
-      },
+  Future<void> _openJoinClassScreen() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => JoinClassScreen(onJoin: _joinUsingCode),
+      ),
     );
   }
 
-  Future<void> _joinUsingCode(String code) async {
+  Future<bool> _joinUsingCode(String code) async {
     try {
-      final room = await widget.classroomService.joinClassroom(
+      final room = await widget.classroomService.joinClassroomAsStudent(
         student: widget.user,
         code: code,
       );
-      await _loadClassrooms();
-      if (!mounted) {
-        return;
-      }
+      await _loadData();
+      if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Joined ${room.section} (${room.code})')),
+        SnackBar(content: Text('Joined ${room.section} (${room.studentCode})')),
       );
+      return true;
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+      return false;
     }
+  }
+
+  Future<void> _openCreatePass() async {
+    if (_joinedClassrooms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Join a class before creating a pass.')),
+      );
+      return;
+    }
+
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => CreatePassScreen(
+          student: widget.user,
+          classrooms: _joinedClassrooms,
+          gatePassService: widget.gatePassService,
+        ),
+      ),
+    );
+
+    if (submitted == true) {
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Pass request submitted to Class Incharge!'),
+        ),
+      );
+      // Switch to status tab
+      setState(() => _tabIndex = 1);
+    }
+  }
+
+  void _openApprovedPass(GatePassRequest request) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ApprovedPassScreen(request: request),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasClass = _joinedClassrooms.isNotEmpty;
+    final activeRequests = _requests
+        .where(
+          (r) =>
+              r.status == RequestStatus.pendingTeacher ||
+              r.status == RequestStatus.forwardedToHod,
+        )
+        .toList();
+    final historyRequests = _requests
+        .where(
+          (r) =>
+              r.status == RequestStatus.approved ||
+              r.status == RequestStatus.rejectedByTeacher ||
+              r.status == RequestStatus.rejectedByHod,
+        )
+        .toList();
+
     return Scaffold(
+      drawer: Drawer(
+        child: ListView(
+          children: <Widget>[
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Icon(Icons.account_circle,
+                      color: Colors.white, size: 40),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.user.name,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    widget.user.department,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Dashboard'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text('Refresh'),
+              onTap: () {
+                Navigator.pop(context);
+                _loadData();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: widget.onLogout,
+            ),
+          ],
+        ),
+      ),
       appBar: AppBar(
-        title: const Text('home'),
+        title: const Text('Student Dashboard'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Profile',
+            onPressed: _showProfile,
+            icon: const Icon(Icons.account_circle_outlined),
+          ),
           IconButton(
             tooltip: 'Logout',
             onPressed: widget.onLogout,
@@ -114,63 +213,441 @@ class _StudentDashboardState extends State<StudentDashboard> {
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadClassrooms,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            children: <Widget>[
-              _welcomeCard(),
-              const SizedBox(height: 14),
-              _joinClassCard(),
-              const SizedBox(height: 14),
-              Text(
-                'Joined Classes',
-                style: Theme.of(context).textTheme.titleMedium,
+        child: Row(
+          children: <Widget>[
+            if (!hasClass)
+              SizedBox(
+                width: 74,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: JoinClassShortcutBox(onTap: _openJoinClassScreen),
+                  ),
+                ),
               ),
-              const SizedBox(height: 10),
-              if (_loading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(22),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (_joinedClassrooms.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'No class joined yet. Tap join class and enter unique code.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                )
-              else
-                ..._joinedClassrooms.map((room) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Card(
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFD1E4FB),
-                          child: Icon(
-                            Icons.class_outlined,
-                            color: Color(0xFF1B84F2),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadData,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 16, 16),
+                  children: <Widget>[
+                    _welcomeCard(),
+                    const SizedBox(height: 12),
+
+                    // Active pass banner
+                    if (activeRequests.isNotEmpty)
+                      _activeBanner(activeRequests.first),
+
+                    if (!hasClass)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline,
+                                  color: Colors.orange),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Join your class first using the unique code from your Class Incharge.',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        title: Text('${room.section} • ${room.code}'),
-                        subtitle: Text(
-                          'Teacher: ${room.teacherName}\nJoined via code • ${DateFormat('dd MMM').format(room.createdAt)}',
-                        ),
-                        isThreeLine: true,
+                      )
+                    else
+                      Text(
+                        '📚 ${_joinedClassrooms.map((c) => c.section).join(', ')}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
                       ),
+
+                    const SizedBox(height: 12),
+
+                    // Tab switcher
+                    SegmentedButton<int>(
+                      segments: <ButtonSegment<int>>[
+                        const ButtonSegment<int>(
+                          value: 0,
+                          label: Text('New Pass'),
+                          icon: Icon(Icons.add_card_outlined),
+                        ),
+                        ButtonSegment<int>(
+                          value: 1,
+                          label: Text(
+                            activeRequests.isEmpty
+                                ? 'Status'
+                                : 'Status (${activeRequests.length})',
+                          ),
+                          icon: const Icon(Icons.schedule_outlined),
+                        ),
+                        ButtonSegment<int>(
+                          value: 2,
+                          label: Text(
+                            historyRequests.isEmpty
+                                ? 'History'
+                                : 'History (${historyRequests.length})',
+                          ),
+                          icon: const Icon(Icons.history),
+                        ),
+                      ],
+                      selected: <int>{_tabIndex},
+                      onSelectionChanged: (selection) {
+                        setState(() => _tabIndex = selection.first);
+                      },
                     ),
-                  );
-                }),
+                    const SizedBox(height: 14),
+                    if (_loading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_tabIndex == 0)
+                      _buildCreateSection(hasClass)
+                    else if (_tabIndex == 1)
+                      _buildStatusSection(activeRequests)
+                    else
+                      _buildHistorySection(historyRequests),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _activeBanner(GatePassRequest request) {
+    Color bgColor;
+    String message;
+    if (request.status == RequestStatus.pendingTeacher) {
+      bgColor = Colors.orange.shade100;
+      message = '⏳ Pass pending Class Incharge approval';
+    } else {
+      bgColor = Colors.blue.shade100;
+      message = '⏳ Pass pending HOD approval';
+    }
+    return GestureDetector(
+      onTap: () => setState(() => _tabIndex = 1),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.access_time, size: 16),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message, style: const TextStyle(fontSize: 13))),
+            const Icon(Icons.chevron_right, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showProfile() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                widget.user.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              _profileRow('Role', widget.user.role),
+              _profileRow('Email', widget.user.email),
+              _profileRow('Department', widget.user.department),
+              _profileRow('Year', widget.user.year ?? '—'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _profileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+              width: 90,
+              child: Text(label,
+                  style: const TextStyle(color: Colors.grey, fontSize: 13))),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateSection(bool hasClass) {
+    if (!hasClass) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        _actionCard(
+          icon: Icons.login_outlined,
+          color: Colors.blue,
+          title: 'Outing Pass',
+          subtitle: 'Evening / Sunday outing within the day',
+          onTap: () async {
+            if (_joinedClassrooms.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Join a class before creating a pass.')),
+              );
+              return;
+            }
+            final submitted = await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (_) => CreatePassScreen(
+                  student: widget.user,
+                  classrooms: _joinedClassrooms,
+                  gatePassService: widget.gatePassService,
+                  initialPassType: PassType.outing,
+                ),
+              ),
+            );
+            if (submitted == true) {
+              await _loadData();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content:
+                        Text('✅ Pass request submitted to Class Incharge!')),
+              );
+              setState(() => _tabIndex = 1);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        _actionCard(
+          icon: Icons.home_outlined,
+          color: Colors.orange,
+          title: 'Leave / Native Pass',
+          subtitle: 'Going home or native place for holiday',
+          onTap: () async {
+            if (_joinedClassrooms.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Join a class before creating a pass.')),
+              );
+              return;
+            }
+            final submitted = await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (_) => CreatePassScreen(
+                  student: widget.user,
+                  classrooms: _joinedClassrooms,
+                  gatePassService: widget.gatePassService,
+                  initialPassType: PassType.leave,
+                ),
+              ),
+            );
+            if (submitted == true) {
+              await _loadData();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content:
+                        Text('✅ Leave request submitted to Class Incharge!')),
+              );
+              setState(() => _tabIndex = 1);
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                const Icon(Icons.route_outlined, color: Colors.grey),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Request flow: You → Class Incharge → HOD → Approved Digital Pass',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(30),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey.shade400),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStatusSection(List<GatePassRequest> active) {
+    if (active.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.check_circle_outline,
+                  color: Colors.green.shade400, size: 48),
+              const SizedBox(height: 12),
+              const Text(
+                'No active pass requests.',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Create a new pass from the "New Pass" tab.',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: active.map((request) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: PassStatusCard(
+            request: request,
+            onViewPass: () => _openApprovedPass(request),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildHistorySection(List<GatePassRequest> history) {
+    if (history.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.history_outlined,
+                  color: Colors.grey.shade400, size: 48),
+              const SizedBox(height: 12),
+              const Text('No pass history yet.'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: history.map((request) {
+        final isApproved = request.status == RequestStatus.approved;
+        final isRejected = request.status == RequestStatus.rejectedByTeacher ||
+            request.status == RequestStatus.rejectedByHod;
+
+        Color statusColor =
+            isApproved ? Colors.green : (isRejected ? Colors.red : Colors.grey);
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: statusColor.withAlpha(30),
+                child: Icon(
+                  isApproved
+                      ? Icons.check
+                      : (isRejected ? Icons.close : Icons.schedule),
+                  color: statusColor,
+                  size: 18,
+                ),
+              ),
+              title: Text(
+                '${request.passType} — ${request.classroomSection}',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(
+                '${DateFormat('dd MMM yyyy').format(request.date)}${request.isLeavePass && request.destination != null ? " → ${request.destination}" : ""}\n${request.status}',
+              ),
+              isThreeLine: true,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: isApproved ? () => _openApprovedPass(request) : null,
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -190,61 +667,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'All Clear',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF2DAF64),
-                    ),
+                    '${widget.user.department}${widget.user.year != null ? " • ${widget.user.year}" : ""}',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
               ),
             ),
-            const Icon(
-              Icons.check_circle_outline,
-              color: Color(0xFF2DAF64),
-              size: 34,
-            ),
+            const Icon(Icons.badge_outlined, size: 30),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _joinClassCard() {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: _joinClass,
-        child: Container(
-          height: 350,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: const Color(0xFFD1E4FB),
-          ),
-          child: Center(
-            child: Container(
-              width: 180,
-              height: 180,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFA5C9F1),
-              ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Icon(Icons.add, size: 56, color: Color(0xFF47678D)),
-                  SizedBox(height: 8),
-                  Text(
-                    'join class',
-                    style: TextStyle(
-                      color: Color(0xFF203A5E),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 23,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ),
       ),
     );

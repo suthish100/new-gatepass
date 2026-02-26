@@ -6,22 +6,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Keep auth-gated rules simple while the app is in active development.
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return userDoc().data.role;
+    }
+
+    function isHod() {
+      return isSignedIn() && userRole() == 'HOD';
+    }
+
+    function isTeacher() {
+      return isSignedIn() && userRole() == 'Teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && userRole() == 'Student';
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /staff_invites/{inviteId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isHod();
+      allow update, delete: if isHod() && resource.data.hodId == request.auth.uid;
     }
 
     match /classrooms/{classroomId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isHod();
+      allow update: if
+        (isHod() && resource.data.hodId == request.auth.uid) ||
+        (
+          isTeacher() &&
+          resource.data.teacherId == '' &&
+          request.resource.data.teacherId == request.auth.uid &&
+          request.resource.data.hodId == resource.data.hodId &&
+          request.resource.data.staffCode == resource.data.staffCode &&
+          request.resource.data.department == resource.data.department &&
+          request.resource.data.year == resource.data.year &&
+          request.resource.data.section == resource.data.section
+        );
+      allow delete: if isHod() && resource.data.hodId == request.auth.uid;
     }
 
     match /classroom_members/{memberId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isStudent();
+      allow delete: if isHod() || isTeacher();
+      allow update: if false;
+    }
+
+    match /gate_pass_requests/{requestId} {
+      allow read: if isSignedIn() &&
+        (
+          resource.data.studentId == request.auth.uid ||
+          resource.data.teacherId == request.auth.uid ||
+          resource.data.hodId == request.auth.uid
+        );
+      allow create: if isStudent() &&
+        request.resource.data.studentId == request.auth.uid;
+      allow update: if isSignedIn() &&
+        (
+          resource.data.teacherId == request.auth.uid ||
+          resource.data.hodId == request.auth.uid
+        );
+      allow delete: if false;
     }
   }
 }

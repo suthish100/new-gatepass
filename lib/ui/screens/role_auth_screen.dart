@@ -11,12 +11,16 @@ class RoleAuthScreen extends StatefulWidget {
     required this.authService,
     required this.onBack,
     required this.onAuthenticated,
+    this.initialYearOrSection,
+    this.startInRegisterMode = false,
   });
 
   final String role;
   final AuthService authService;
   final VoidCallback onBack;
   final ValueChanged<AppUser> onAuthenticated;
+  final String? initialYearOrSection;
+  final bool startInRegisterMode;
 
   @override
   State<RoleAuthScreen> createState() => _RoleAuthScreenState();
@@ -33,6 +37,17 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
   bool _submitting = false;
   String _department = departments.first;
   String _yearOrSection = classSections.first;
+  String _hodType = HodType.firstYear;
+
+  @override
+  void initState() {
+    super.initState();
+    _isLoginMode = !widget.startInRegisterMode;
+    final prefill = widget.initialYearOrSection?.trim();
+    if ((prefill ?? '').isNotEmpty && classSections.contains(prefill)) {
+      _yearOrSection = prefill!;
+    }
+  }
 
   @override
   void dispose() {
@@ -69,6 +84,7 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
           role: widget.role,
           department: _department,
           year: widget.role == AppRoles.hod ? null : _yearOrSection,
+          hodType: widget.role == AppRoles.hod ? _hodType : null,
           password: _passwordController.text.trim(),
         );
       }
@@ -188,6 +204,28 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
                               setState(() => _department = value);
                             },
                           ),
+                          if (widget.role == AppRoles.hod) ...<Widget>[
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              value: _hodType,
+                              decoration: const InputDecoration(
+                                labelText: 'HOD Type',
+                                prefixIcon: Icon(Icons.badge_outlined),
+                              ),
+                              items: HodType.all.map((type) {
+                                return DropdownMenuItem<String>(
+                                  value: type,
+                                  child: Text(type),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setState(() => _hodType = value);
+                              },
+                            ),
+                          ],
                           if (widget.role != AppRoles.hod) ...<Widget>[
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(

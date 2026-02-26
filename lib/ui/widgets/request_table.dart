@@ -52,7 +52,10 @@ class RequestTable extends StatelessWidget {
               DataCell(
                 SizedBox(
                   width: 120,
-                  child: Text(request.name, overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    request.studentName,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
               DataCell(Text(request.registerNumber)),

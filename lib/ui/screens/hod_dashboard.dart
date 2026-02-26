@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants.dart';
 import '../../models/app_user.dart';
-import '../../models/staff_invite.dart';
+import '../../models/classroom.dart';
+import '../../models/gate_pass_request.dart';
 import '../../services/classroom_service.dart';
+import '../../services/gate_pass_service.dart';
 
 class HodDashboard extends StatefulWidget {
   const HodDashboard({
     super.key,
     required this.user,
     required this.classroomService,
+    required this.gatePassService,
     required this.onLogout,
   });
 
   final AppUser user;
   final ClassroomService classroomService;
+  final GatePassService gatePassService;
   final VoidCallback onLogout;
 
   @override
@@ -25,20 +31,45 @@ class HodDashboard extends StatefulWidget {
 
 class _HodDashboardState extends State<HodDashboard> {
   bool _loading = true;
-  List<StaffInvite> _invites = <StaffInvite>[];
+  String? _errorMessage;
+  List<Classroom> _classrooms = <Classroom>[];
+  List<GatePassRequest> _requests = <GatePassRequest>[];
 
   @override
   void initState() {
     super.initState();
-    _loadInvites();
+    _loadData();
   }
 
-  Future<void> _loadInvites() async {
+  Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      _invites = await widget.classroomService.fetchInvitesForHod(
-        widget.user.id,
-      );
+      try {
+        await _ensureDefaultClasses();
+      } catch (error) {
+        if (mounted) {
+          setState(() => _errorMessage = 'Class Creation Error: \${error.toString()}');
+        }
+      }
+      try {
+        final classrooms = await widget.classroomService.fetchClassroomsForHod(
+          widget.user.id,
+        );
+        final requests = await widget.gatePassService.fetchHodRequests(
+          hodId: widget.user.id,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _classrooms = classrooms;
+          _requests = requests;
+        });
+      } catch (error) {
+        if (mounted) {
+          setState(() => _errorMessage = 'Fetch Error: \${error.toString()}');
+        }
+      }
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -46,77 +77,97 @@ class _HodDashboardState extends State<HodDashboard> {
     }
   }
 
-  Future<void> _openAddStaffDialog(String section) async {
-    final controller = TextEditingController();
-    await showDialog<void>(
+  Future<void> _ensureDefaultClasses() async {
+    final existing = await widget.classroomService.fetchClassroomsForHod(
+      widget.user.id,
+    );
+    final existingYears = existing.map((room) => room.year).toSet();
+
+    final years = widget.user.hodType == HodType.firstYear
+        ? <String>[classYears.first]
+        : <String>['II Year', 'III Year', 'IV Year'];
+
+    for (final year in years) {
+      if (existingYears.contains(year)) {
+        continue;
+      }
+      await widget.classroomService.createClassroomByHod(
+        hod: widget.user,
+        year: year,
+        department: widget.user.department,
+      );
+    }
+  }
+
+  Future<void> _inviteStaff(Classroom room) async {
+    final emailController = TextEditingController();
+
+    final sent = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add Staff - $section'),
+          title: const Text('Add Staff'),
           content: TextField(
-            controller: controller,
+            controller: emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              hintText: 'Enter staff email',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Staff Email'),
           ),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                final email = controller.text.trim();
-                if (email.isEmpty) {
-                  return;
-                }
-                Navigator.pop(context);
-                await _sendInvite(section: section, email: email);
-              },
-              child: const Text('Send Invite'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Send'),
             ),
           ],
         );
       },
     );
-  }
 
-  Future<void> _sendInvite({
-    required String section,
-    required String email,
-  }) async {
+    if (sent != true) {
+      return;
+    }
+
     try {
       final invite = await widget.classroomService.sendStaffInvitation(
         hodId: widget.user.id,
-        section: section,
-        staffEmail: email,
+        section: room.section,
+        staffEmail: emailController.text,
       );
-      await _loadInvites();
       if (!mounted) {
         return;
       }
+
+      final emailUri = Uri(
+        scheme: 'mailto',
+        path: invite.staffEmail,
+        queryParameters: <String, String>{
+          'subject': 'Class Invitation - ${room.section}',
+          'body':
+              'You are invited to join ${room.section}.\n\nUse this invitation link:\n${invite.inviteLink}\n\nOr use class code: ${room.staffCode}',
+        },
+      );
+
+      final launched = await launchUrl(
+        emailUri,
+        mode: LaunchMode.externalApplication,
+      );
+
       await Clipboard.setData(ClipboardData(text: invite.inviteLink));
       if (!mounted) {
         return;
       }
-      showDialog<void>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Invitation Link Created'),
-            content: SelectableText(
-              'Invitation link copied.\n\n${invite.inviteLink}',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            launched
+                ? 'Email compose opened. Invite link copied.'
+                : 'Unable to open email app. Invite link copied.',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) {
@@ -128,155 +179,298 @@ class _HodDashboardState extends State<HodDashboard> {
     }
   }
 
+  Future<void> _openClassroomDetails(Classroom room) async {
+    final status = room.teacherId.isEmpty
+        ? 'Staff not assigned yet'
+        : 'Assigned to ${room.teacherName}';
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(room.section),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                SelectableText(
+                  'Status: $status\n'
+                  'Staff Join Code: ${room.staffCode}\n'
+                  'Student Code: ${room.studentCode.isEmpty ? 'Generated after staff join' : room.studentCode}',
+                ),
+                const SizedBox(height: 16),
+                const Text('Staff Code QR:'),
+                QrImageView(data: room.staffCode, size: 150),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await Clipboard.setData(ClipboardData(text: room.staffCode));
+                if (!mounted) {
+                  return;
+                }
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Staff code copied')),
+                );
+              },
+              child: const Text('Copy Code'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _inviteStaff(room);
+              },
+              child: const Text('Add Staff'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _reviewRequest({
+    required GatePassRequest request,
+    required bool approve,
+  }) async {
+    final reasonController = TextEditingController();
+    String? reason;
+
+    if (!approve) {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Reject Request'),
+            content: TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Reason (optional)'),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, reasonController.text),
+                child: const Text('Reject'),
+              ),
+            ],
+          );
+        },
+      );
+      if (!mounted || result == null) {
+        return;
+      }
+      reason = result;
+    }
+
+    try {
+      await widget.gatePassService.hodAction(
+        request: request,
+        hod: widget.user,
+        approve: approve,
+        cancelReason: reason,
+      );
+      await _loadData();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            approve
+                ? 'Final approval completed. Student can use this gate pass.'
+                : 'Request rejected by HOD.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  void _showProfile() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                widget.user.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text('Role: ${widget.user.role}'),
+              Text('Email: ${widget.user.email}'),
+              Text('Department: ${widget.user.department}'),
+              Text('HOD Type: ${widget.user.hodType ?? HodType.senior}'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pending = _requests
+        .where((request) => request.status == RequestStatus.forwardedToHod)
+        .toList();
+
     return Scaffold(
+      drawer: Drawer(
+        child: ListView(
+          children: <Widget>[
+            const DrawerHeader(child: Text('HOD Navigation')),
+            ListTile(
+              leading: const Icon(Icons.dashboard_outlined),
+              title: const Text('Dashboard'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: const Text('Refresh'),
+              onTap: () {
+                Navigator.pop(context);
+                _loadData();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: widget.onLogout,
+            ),
+          ],
+        ),
+      ),
       appBar: AppBar(
-        title: const Text('home'),
+        title: const Text('HOD Dashboard'),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Logout',
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
+            tooltip: 'Profile',
+            onPressed: _showProfile,
+            icon: const Icon(Icons.account_circle_outlined),
           ),
         ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadInvites,
+          onRefresh: _loadData,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
             children: <Widget>[
-              _welcomeCard(),
-              const SizedBox(height: 14),
-              Text(
-                'Predefined Class Sections',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 10),
-              ...classSections.map((section) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _sectionCard(section),
-                );
-              }),
-              const SizedBox(height: 14),
-              Text(
-                'Sent Invitations',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 10),
               Card(
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    : _invites.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(18),
-                        child: Text('No invitation sent yet.'),
-                      )
-                    : ListView.separated(
-                        itemCount: _invites.length,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final invite = _invites[index];
+                child: ListTile(
+                  leading: const Icon(Icons.school_outlined),
+                  title: Text(
+                    widget.user.hodType == HodType.firstYear
+                        ? 'Default: Single First Year Class'
+                        : 'Default: II, III, IV Year Classes',
+                  ),
+                  subtitle: Text('Department: ${widget.user.department}'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text('Classes', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 10),
+              if (_loading)
+                const Center(child: CircularProgressIndicator())
+              else if (_classrooms.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      _errorMessage ?? 'No classes found. Pull to refresh or check HOD registration type.',
+                      style: TextStyle(
+                        color: _errorMessage != null ? Colors.red : null,
+                        fontWeight: _errorMessage != null ? FontWeight.bold : null,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ..._classrooms.map((room) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Card(
+                      child: ListTile(
+                        title: Text(room.section),
+                        subtitle: Text(
+                          room.teacherId.isEmpty
+                              ? 'Staff pending | code: ${room.staffCode}'
+                              : 'Assigned: ${room.teacherName} | code: ${room.staffCode}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openClassroomDetails(room),
+                      ),
+                    ),
+                  );
+                }),
+              const SizedBox(height: 14),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Final Approval Queue',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      if (pending.isEmpty)
+                        const Text('No requests waiting for HOD approval.')
+                      else
+                        ...pending.map((request) {
                           return ListTile(
-                            title: Text(invite.staffEmail),
-                            subtitle: Text(
-                              '${invite.section} • ${DateFormat('dd MMM, hh:mm a').format(invite.createdAt)}',
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              '${request.studentName} - ${request.passType}',
                             ),
-                            trailing: IconButton(
-                              tooltip: 'Copy link',
-                              onPressed: () async {
-                                await Clipboard.setData(
-                                  ClipboardData(text: invite.inviteLink),
-                                );
-                                if (!context.mounted) {
-                                  return;
-                                }
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Invitation link copied'),
+                            subtitle: Text(
+                              '${request.classroomSection}\n${DateFormat('dd MMM').format(request.date)} | ${request.outTime} - ${request.inTime}',
+                            ),
+                            isThreeLine: true,
+                            trailing: Wrap(
+                              spacing: 6,
+                              children: <Widget>[
+                                OutlinedButton(
+                                  onPressed: () => _reviewRequest(
+                                    request: request,
+                                    approve: false,
                                   ),
-                                );
-                              },
-                              icon: const Icon(Icons.link),
+                                  child: const Text('Reject'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => _reviewRequest(
+                                    request: request,
+                                    approve: true,
+                                  ),
+                                  child: const Text('Approve'),
+                                ),
+                              ],
                             ),
                           );
-                        },
-                      ),
+                        }),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _welcomeCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Welcome, ${widget.user.name}!',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'HOD control panel ready',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF2DAF64),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.check_circle_outline,
-              color: Color(0xFF2DAF64),
-              size: 34,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sectionCard(String section) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(section, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 3),
-                  Text(
-                    'Invite class incharge by email',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _openAddStaffDialog(section),
-              icon: const Icon(Icons.person_add_alt_1, size: 18),
-              label: const Text('Add Staff'),
-            ),
-          ],
         ),
       ),
     );

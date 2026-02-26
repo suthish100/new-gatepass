@@ -13,7 +13,8 @@ class StatusBadge extends StatelessWidget {
     switch (status) {
       case RequestStatus.approved:
         color = const Color(0xFF1DE9B6);
-      case RequestStatus.rejected:
+      case RequestStatus.rejectedByTeacher:
+      case RequestStatus.rejectedByHod:
         color = const Color(0xFFFF5A7A);
       case RequestStatus.forwardedToHod:
         color = const Color(0xFFFFD166);

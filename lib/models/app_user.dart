@@ -6,6 +6,8 @@ class AppUser {
     required this.role,
     required this.department,
     this.year,
+    this.hodType,
+    this.registerNumber,
   });
 
   final String id;
@@ -14,6 +16,8 @@ class AppUser {
   final String role;
   final String department;
   final String? year;
+  final String? hodType;
+  final String? registerNumber;
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
@@ -23,6 +27,8 @@ class AppUser {
       'role': role,
       'department': department,
       'year': year,
+      'hodType': hodType,
+      'registerNumber': registerNumber,
     };
   }
 
@@ -34,6 +40,8 @@ class AppUser {
       role: map['role'] as String? ?? '',
       department: map['department'] as String? ?? '',
       year: map['year'] as String?,
+      hodType: map['hodType'] as String?,
+      registerNumber: map['registerNumber'] as String?,
     );
   }
 }

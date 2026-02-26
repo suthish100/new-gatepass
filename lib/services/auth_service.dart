@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../core/constants.dart';
 import '../models/app_user.dart';
 import 'firebase_bootstrap.dart';
 
@@ -22,6 +23,7 @@ class AuthService {
     required String role,
     required String department,
     String? year,
+    String? hodType,
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -39,6 +41,7 @@ class AuthService {
         role: role,
         department: department,
         year: year,
+        hodType: hodType,
       );
       await _firestore.collection('users').doc(uid).set(user.toMap());
       return user;
@@ -55,6 +58,7 @@ class AuthService {
       role: role,
       department: department,
       year: year,
+      hodType: hodType,
     );
     _localUsers[normalizedEmail] = _LocalUserRecord(
       user: localUser,
@@ -150,6 +154,7 @@ class AuthService {
           email: 'hod@egatepass.com',
           role: 'HOD',
           department: 'AI&DS',
+          hodType: HodType.senior,
         ),
         password: '123456',
       ),

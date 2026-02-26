@@ -1,7 +1,9 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
+import '../core/constants.dart';
 import '../models/app_user.dart';
 import '../models/classroom.dart';
 import '../models/classroom_member.dart';
@@ -9,6 +11,8 @@ import '../models/staff_invite.dart';
 import 'firebase_bootstrap.dart';
 
 class ClassroomService {
+  static const String _linkHost = 'egatepass-b9da7.web.app';
+
   final List<StaffInvite> _localInvites = <StaffInvite>[];
   final List<Classroom> _localClassrooms = <Classroom>[];
   final List<ClassroomMember> _localMembers = <ClassroomMember>[];
@@ -22,8 +26,17 @@ class ClassroomService {
     required String staffEmail,
   }) async {
     final token = _randomToken(12);
-    final link =
-        'https://e-gatepass.app/invite?role=teacher&section=${Uri.encodeComponent(section)}&token=$token';
+    final link = Uri.https(_linkHost, '/invite', <String, String>{
+      'role': 'teacher',
+      'section': section,
+      'token': token,
+    }).toString();
+    if (kDebugMode) {
+      debugPrint('Staff invite link: $link');
+      debugPrint(
+        'Staff dev app link: egatepass://invite?role=teacher&section=${Uri.encodeComponent(section)}&token=$token',
+      );
+    }
     final now = DateTime.now();
 
     if (FirebaseBootstrap.isReady) {
@@ -57,15 +70,141 @@ class ClassroomService {
       final snapshot = await _firestore
           .collection('staff_invites')
           .where('hodId', isEqualTo: hodId)
-          .orderBy('createdAt', descending: true)
           .get();
-      return snapshot.docs
+      final invites = snapshot.docs
           .map((doc) => StaffInvite.fromMap(doc.data(), doc.id))
           .toList();
+      invites.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return invites;
     }
 
     return _localInvites.where((invite) => invite.hodId == hodId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  Future<void> sendStudentInvitation({
+    required Classroom classroom,
+    required String studentEmail,
+  }) async {
+    final emailUri = Uri(
+      scheme: 'mailto',
+      path: studentEmail.trim().toLowerCase(),
+      queryParameters: <String, String>{
+        'subject': 'Class Joining Invitation - ${classroom.section}',
+        'body':
+            'You are invited to join ${classroom.section}.\n\nUse this class code to join:\n${classroom.studentCode}\n\nOr use this link:\n${classroom.inviteLink}',
+      },
+    );
+
+    // Since we can't directly send email from Flutter, we open the email app
+    // In a real app, you'd use a backend service to send emails
+    // For now, we'll just prepare the URI
+    if (kDebugMode) {
+      debugPrint('Student invite email URI: $emailUri');
+    }
+  }
+
+  Future<Classroom> createClassroomByHod({
+    required AppUser hod,
+    required String year,
+    required String department,
+  }) async {
+    if (hod.role != AppRoles.hod) {
+      throw ClassroomException('Only HOD can create class rooms.');
+    }
+
+    await _ensureHodCanCreateYear(hod: hod, year: year);
+
+    final now = DateTime.now();
+    final staffCode = await _generateUniqueCode();
+    final section = '$year - $department';
+
+    final room = Classroom(
+      id: '',
+      section: section,
+      year: year,
+      department: department,
+      hodId: hod.id,
+      teacherId: '',
+      teacherName: '',
+      teacherEmail: '',
+      staffCode: staffCode,
+      studentCode: '',
+      code: '',
+      inviteLink: '',
+      createdAt: now,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      final doc = _firestore.collection('classrooms').doc();
+      final saved = room.copyWith(id: doc.id);
+      await doc.set(saved.toMap());
+      if (kDebugMode) {
+        debugPrint('HOD created class room: ${saved.section}');
+        debugPrint('Staff join code: ${saved.staffCode}');
+      }
+      return saved;
+    }
+
+    final saved = room.copyWith(
+      id: 'class_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    _localClassrooms.insert(0, saved);
+    if (kDebugMode) {
+      debugPrint('HOD created class room: ${saved.section}');
+      debugPrint('Staff join code: ${saved.staffCode}');
+    }
+    return saved;
+  }
+
+  Future<void> deleteClassroomByHod({
+    required AppUser hod,
+    required String classroomId,
+  }) async {
+    if (hod.role != AppRoles.hod) {
+      throw ClassroomException('Only HOD can remove class rooms.');
+    }
+
+    if (classroomId.trim().isEmpty) {
+      throw ClassroomException('Invalid class room id.');
+    }
+
+    if (FirebaseBootstrap.isReady) {
+      final roomRef = _firestore.collection('classrooms').doc(classroomId);
+      final roomSnapshot = await roomRef.get();
+      final data = roomSnapshot.data();
+      if (data == null) {
+        return;
+      }
+      final room = Classroom.fromMap(data, roomSnapshot.id);
+      if (room.hodId != hod.id) {
+        throw ClassroomException('You can delete only your own class rooms.');
+      }
+
+      final membersSnapshot = await _firestore
+          .collection('classroom_members')
+          .where('classroomId', isEqualTo: classroomId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (final memberDoc in membersSnapshot.docs) {
+        batch.delete(memberDoc.reference);
+      }
+      batch.delete(roomRef);
+      await batch.commit();
+      return;
+    }
+
+    final room = _localClassrooms.firstWhere(
+      (item) => item.id == classroomId,
+      orElse: () => throw ClassroomException('Class room not found.'),
+    );
+    if (room.hodId != hod.id) {
+      throw ClassroomException('You can delete only your own class rooms.');
+    }
+
+    _localClassrooms.removeWhere((item) => item.id == classroomId);
+    _localMembers.removeWhere((member) => member.classroomId == classroomId);
   }
 
   Future<Classroom> createClassroom({
@@ -73,37 +212,63 @@ class ClassroomService {
     required AppUser teacher,
   }) async {
     final now = DateTime.now();
-    final code = await _generateUniqueClassCode();
-    final inviteLink = 'https://e-gatepass.app/join?code=$code';
-
-    if (FirebaseBootstrap.isReady) {
-      final doc = _firestore.collection('classrooms').doc();
-      final room = Classroom(
-        id: doc.id,
-        section: section,
-        teacherId: teacher.id,
-        teacherName: teacher.name,
-        teacherEmail: teacher.email,
-        code: code,
-        inviteLink: inviteLink,
-        createdAt: now,
-      );
-      await doc.set(room.toMap());
-      return room;
+    final staffCode = await _generateUniqueCode();
+    final studentCode = await _generateUniqueCode();
+    final inviteLink = Uri.https(_linkHost, '/join', <String, String>{
+      'code': studentCode,
+    }).toString();
+    if (kDebugMode) {
+      debugPrint('Class invite link: $inviteLink');
+      debugPrint('Staff code: $staffCode');
+      debugPrint('Student code: $studentCode');
+      debugPrint('Dev app link: egatepass://join?code=$studentCode');
     }
 
     final room = Classroom(
-      id: 'class_${DateTime.now().microsecondsSinceEpoch}',
+      id: '',
       section: section,
+      year: teacher.year ?? section,
+      department: teacher.department,
+      hodId: '',
       teacherId: teacher.id,
       teacherName: teacher.name,
       teacherEmail: teacher.email,
-      code: code,
+      staffCode: staffCode,
+      studentCode: studentCode,
+      code: studentCode,
       inviteLink: inviteLink,
       createdAt: now,
     );
-    _localClassrooms.insert(0, room);
-    return room;
+
+    if (FirebaseBootstrap.isReady) {
+      final doc = _firestore.collection('classrooms').doc();
+      final saved = room.copyWith(id: doc.id);
+      await doc.set(saved.toMap());
+      return saved;
+    }
+
+    final saved = room.copyWith(
+      id: 'class_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    _localClassrooms.insert(0, saved);
+    return saved;
+  }
+
+  Future<List<Classroom>> fetchClassroomsForHod(String hodId) async {
+    if (FirebaseBootstrap.isReady) {
+      final snapshot = await _firestore
+          .collection('classrooms')
+          .where('hodId', isEqualTo: hodId)
+          .get();
+      final rooms = snapshot.docs
+          .map((doc) => Classroom.fromMap(doc.data(), doc.id))
+          .toList();
+      rooms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return rooms;
+    }
+
+    return _localClassrooms.where((room) => room.hodId == hodId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<List<Classroom>> fetchClassroomsForTeacher(String teacherId) async {
@@ -111,11 +276,12 @@ class ClassroomService {
       final snapshot = await _firestore
           .collection('classrooms')
           .where('teacherId', isEqualTo: teacherId)
-          .orderBy('createdAt', descending: true)
           .get();
-      return snapshot.docs
+      final rooms = snapshot.docs
           .map((doc) => Classroom.fromMap(doc.data(), doc.id))
           .toList();
+      rooms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return rooms;
     }
 
     return _localClassrooms
@@ -131,11 +297,12 @@ class ClassroomService {
       final snapshot = await _firestore
           .collection('classroom_members')
           .where('classroomId', isEqualTo: classroomId)
-          .orderBy('joinedAt', descending: true)
           .get();
-      return snapshot.docs
+      final members = snapshot.docs
           .map((doc) => ClassroomMember.fromMap(doc.data(), doc.id))
           .toList();
+      members.sort((a, b) => b.joinedAt.compareTo(a.joinedAt));
+      return members;
     }
 
     return _localMembers
@@ -144,34 +311,147 @@ class ClassroomService {
       ..sort((a, b) => b.joinedAt.compareTo(a.joinedAt));
   }
 
-  Future<Classroom> joinClassroom({
-    required AppUser student,
+  Future<Classroom> joinClassroomAsStaff({
+    required AppUser staff,
     required String code,
   }) async {
-    final normalizedCode = code.trim().toUpperCase();
+    if (staff.role != AppRoles.teacher) {
+      throw ClassroomException('Only staff can use staff class code.');
+    }
+
+    final normalizedCode = _normalizeCode(code);
     if (normalizedCode.isEmpty) {
-      throw ClassroomException('Please enter a class code.');
+      throw ClassroomException('Please enter staff class code.');
     }
 
     if (FirebaseBootstrap.isReady) {
       final roomQuery = await _firestore
           .collection('classrooms')
-          .where('code', isEqualTo: normalizedCode)
+          .where('staffCode', isEqualTo: normalizedCode)
           .limit(1)
           .get();
       if (roomQuery.docs.isEmpty) {
-        throw ClassroomException('Invalid class joining code.');
+        throw ClassroomException('Invalid staff class code.');
       }
+
       final roomDoc = roomQuery.docs.first;
       final room = Classroom.fromMap(roomDoc.data(), roomDoc.id);
+      _ensureDepartmentMatch(room: room, user: staff);
 
-      final exists = await _firestore
-          .collection('classroom_members')
-          .where('classroomId', isEqualTo: room.id)
-          .where('studentId', isEqualTo: student.id)
+      if (room.teacherId.isNotEmpty && room.teacherId != staff.id) {
+        throw ClassroomException(
+          'This class is already assigned to another staff.',
+        );
+      }
+
+      var studentCode = room.studentCode;
+      var inviteLink = room.inviteLink;
+      if (studentCode.isEmpty) {
+        studentCode = await _generateUniqueCode();
+        inviteLink = Uri.https(_linkHost, '/join', <String, String>{
+          'code': studentCode,
+        }).toString();
+      }
+
+      final updated = room.copyWith(
+        teacherId: staff.id,
+        teacherName: staff.name,
+        teacherEmail: staff.email,
+        studentCode: studentCode,
+        code: studentCode,
+        inviteLink: inviteLink,
+      );
+
+      await roomDoc.reference.update(updated.toMap());
+      return updated;
+    }
+
+    final index = _localClassrooms.indexWhere(
+      (room) => room.staffCode == normalizedCode,
+    );
+    if (index < 0) {
+      throw ClassroomException('Invalid staff class code.');
+    }
+
+    final room = _localClassrooms[index];
+    _ensureDepartmentMatch(room: room, user: staff);
+    if (room.teacherId.isNotEmpty && room.teacherId != staff.id) {
+      throw ClassroomException(
+        'This class is already assigned to another staff.',
+      );
+    }
+
+    var studentCode = room.studentCode;
+    var inviteLink = room.inviteLink;
+    if (studentCode.isEmpty) {
+      studentCode = await _generateUniqueCode();
+      inviteLink = Uri.https(_linkHost, '/join', <String, String>{
+        'code': studentCode,
+      }).toString();
+    }
+
+    final updated = room.copyWith(
+      teacherId: staff.id,
+      teacherName: staff.name,
+      teacherEmail: staff.email,
+      studentCode: studentCode,
+      code: studentCode,
+      inviteLink: inviteLink,
+    );
+    _localClassrooms[index] = updated;
+    return updated;
+  }
+
+  Future<Classroom> joinClassroomAsStudent({
+    required AppUser student,
+    required String code,
+  }) async {
+    if (student.role != AppRoles.student) {
+      throw ClassroomException('Only students can use student class code.');
+    }
+
+    final normalizedCode = _normalizeCode(code);
+    if (normalizedCode.isEmpty) {
+      throw ClassroomException('Please enter student class code.');
+    }
+
+    if (FirebaseBootstrap.isReady) {
+      QuerySnapshot<Map<String, dynamic>> roomQuery = await _firestore
+          .collection('classrooms')
+          .where('studentCode', isEqualTo: normalizedCode)
           .limit(1)
           .get();
-      if (exists.docs.isNotEmpty) {
+
+      if (roomQuery.docs.isEmpty) {
+        roomQuery = await _firestore
+            .collection('classrooms')
+            .where('code', isEqualTo: normalizedCode)
+            .limit(1)
+            .get();
+      }
+
+      if (roomQuery.docs.isEmpty) {
+        throw ClassroomException('Invalid student class code.');
+      }
+
+      final roomDoc = roomQuery.docs.first;
+      final room = Classroom.fromMap(roomDoc.data(), roomDoc.id);
+      if (room.teacherId.isEmpty) {
+        throw ClassroomException(
+          'Staff not assigned yet. Ask your staff for the student code.',
+        );
+      }
+      _ensureDepartmentMatch(room: room, user: student);
+
+      final studentMemberships = await _firestore
+          .collection('classroom_members')
+          .where('studentId', isEqualTo: student.id)
+          .get();
+      final alreadyJoined = studentMemberships.docs.any((doc) {
+        final data = doc.data();
+        return (data['classroomId'] as String? ?? '') == room.id;
+      });
+      if (alreadyJoined) {
         return room;
       }
 
@@ -189,9 +469,18 @@ class ClassroomService {
     }
 
     final room = _localClassrooms.firstWhere(
-      (item) => item.code == normalizedCode,
-      orElse: () => throw ClassroomException('Invalid class joining code.'),
+      (item) =>
+          item.studentCode == normalizedCode || item.code == normalizedCode,
+      orElse: () => throw ClassroomException('Invalid student class code.'),
     );
+
+    if (room.teacherId.isEmpty) {
+      throw ClassroomException(
+        'Staff not assigned yet. Ask your staff for the student code.',
+      );
+    }
+    _ensureDepartmentMatch(room: room, user: student);
+
     final alreadyJoined = _localMembers.any(
       (member) =>
           member.classroomId == room.id && member.studentId == student.id,
@@ -212,12 +501,24 @@ class ClassroomService {
     return room;
   }
 
+  Future<Classroom> joinClassroom({
+    required AppUser student,
+    required String code,
+  }) async {
+    if (student.role == AppRoles.teacher) {
+      return joinClassroomAsStaff(staff: student, code: code);
+    }
+    if (student.role == AppRoles.student) {
+      return joinClassroomAsStudent(student: student, code: code);
+    }
+    throw ClassroomException('Only staff and students can join classroom.');
+  }
+
   Future<List<Classroom>> fetchClassroomsForStudent(String studentId) async {
     if (FirebaseBootstrap.isReady) {
       final memberSnapshot = await _firestore
           .collection('classroom_members')
           .where('studentId', isEqualTo: studentId)
-          .orderBy('joinedAt', descending: true)
           .get();
 
       final roomIds = memberSnapshot.docs
@@ -255,27 +556,115 @@ class ClassroomService {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  Future<String> _generateUniqueClassCode() async {
-    String code = _randomCode();
+  Future<Set<String>> fetchStudentClassroomIds(String studentId) async {
     if (FirebaseBootstrap.isReady) {
-      while (true) {
-        final snapshot = await _firestore
-            .collection('classrooms')
-            .where('code', isEqualTo: code)
-            .limit(1)
-            .get();
-        if (snapshot.docs.isEmpty) {
-          break;
-        }
-        code = _randomCode();
-      }
-      return code;
+      final memberSnapshot = await _firestore
+          .collection('classroom_members')
+          .where('studentId', isEqualTo: studentId)
+          .get();
+      return memberSnapshot.docs
+          .map((doc) => doc.data()['classroomId'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
     }
 
-    while (_localClassrooms.any((room) => room.code == code)) {
+    return _localMembers
+        .where((member) => member.studentId == studentId)
+        .map((member) => member.classroomId)
+        .toSet();
+  }
+
+  Future<void> _ensureHodCanCreateYear({
+    required AppUser hod,
+    required String year,
+  }) async {
+    final existing = await fetchClassroomsForHod(hod.id);
+    final isFirstYearHod = hod.hodType == HodType.firstYear;
+
+    if (isFirstYearHod) {
+      if (year != classYears.first) {
+        throw ClassroomException(
+          'First year HOD can create only I Year class.',
+        );
+      }
+      if (existing.isNotEmpty) {
+        throw ClassroomException(
+          'First year HOD can keep only one common class.',
+        );
+      }
+      return;
+    }
+
+    const seniorYears = <String>['II Year', 'III Year', 'IV Year'];
+    if (!seniorYears.contains(year)) {
+      throw ClassroomException(
+        'Senior HOD can create only II Year, III Year and IV Year classes.',
+      );
+    }
+
+    final duplicate = existing.any((room) => room.year == year);
+    if (duplicate) {
+      throw ClassroomException('Class already exists for $year.');
+    }
+  }
+
+  void _ensureDepartmentMatch({
+    required Classroom room,
+    required AppUser user,
+  }) {
+    if (room.department.isEmpty) {
+      return;
+    }
+    if (room.department != user.department) {
+      throw ClassroomException(
+        'This class is for ${room.department}. Your department is ${user.department}.',
+      );
+    }
+  }
+
+  String _normalizeCode(String code) => code.trim().toUpperCase();
+
+  Future<String> _generateUniqueCode() async {
+    var code = _randomCode();
+    while (await _codeAlreadyUsed(code)) {
       code = _randomCode();
     }
     return code;
+  }
+
+  Future<bool> _codeAlreadyUsed(String code) async {
+    if (FirebaseBootstrap.isReady) {
+      final staffSnap = await _firestore
+          .collection('classrooms')
+          .where('staffCode', isEqualTo: code)
+          .limit(1)
+          .get();
+      if (staffSnap.docs.isNotEmpty) {
+        return true;
+      }
+
+      final studentSnap = await _firestore
+          .collection('classrooms')
+          .where('studentCode', isEqualTo: code)
+          .limit(1)
+          .get();
+      if (studentSnap.docs.isNotEmpty) {
+        return true;
+      }
+
+      final legacySnap = await _firestore
+          .collection('classrooms')
+          .where('code', isEqualTo: code)
+          .limit(1)
+          .get();
+      return legacySnap.docs.isNotEmpty;
+    }
+
+    return _localClassrooms.any((room) {
+      return room.staffCode == code ||
+          room.studentCode == code ||
+          room.code == code;
+    });
   }
 
   String _randomCode() {
