@@ -141,6 +141,29 @@ class AuthService {
         .toList();
   }
 
+  Future<List<AppUser>> fetchTeachersByDepartment(String department) async {
+    if (FirebaseBootstrap.isReady) {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('department', isEqualTo: department)
+          .get();
+      return snapshot.docs
+          .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+            return AppUser.fromMap(doc.data(), doc.id);
+          })
+          .where((user) => user.role == AppRoles.teacher)
+          .toList();
+    }
+
+    return _localUsers.values
+        .map((record) => record.user)
+        .where(
+          (user) =>
+              user.role == AppRoles.teacher && user.department == department,
+        )
+        .toList();
+  }
+
   AppUser? get localSession => _localSession;
 
   void _seedLocalUsers() {

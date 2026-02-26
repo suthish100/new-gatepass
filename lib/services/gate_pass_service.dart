@@ -4,10 +4,15 @@ import '../core/constants.dart';
 import '../models/app_user.dart';
 import '../models/classroom.dart';
 import '../models/gate_pass_request.dart';
+import 'delegation_service.dart';
 import 'firebase_bootstrap.dart';
 
 class GatePassService {
+  GatePassService({DelegationService? delegationService})
+      : _delegationService = delegationService;
+
   final List<GatePassRequest> _localRequests = <GatePassRequest>[];
+  final DelegationService? _delegationService;
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
@@ -187,6 +192,53 @@ class GatePassService {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
+  Future<List<GatePassRequest>> fetchTeacherActionableRequests({
+    required AppUser teacher,
+    bool onlyOpen = false,
+  }) async {
+    final ownRequests = await fetchTeacherRequests(
+      teacherId: teacher.id,
+      onlyOpen: onlyOpen,
+    );
+
+    final delegationService = _delegationService;
+    if (delegationService == null) {
+      return ownRequests;
+    }
+
+    final activeDelegations = await delegationService
+        .fetchActiveDelegationsForDelegate(teacher.id);
+    if (activeDelegations.isEmpty) {
+      return ownRequests;
+    }
+
+    final ownerIds = activeDelegations
+        .map((item) => item.ownerTeacherId)
+        .toSet()
+        .where((ownerId) => ownerId != teacher.id)
+        .toList();
+    if (ownerIds.isEmpty) {
+      return ownRequests;
+    }
+
+    final all = <GatePassRequest>[...ownRequests];
+    for (final ownerId in ownerIds) {
+      final requests = await fetchTeacherRequests(
+        teacherId: ownerId,
+        onlyOpen: onlyOpen,
+      );
+      all.addAll(requests);
+    }
+
+    final uniqueById = <String, GatePassRequest>{};
+    for (final request in all) {
+      uniqueById[request.id] = request;
+    }
+    final unique = uniqueById.values.toList();
+    unique.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return unique;
+  }
+
   Future<List<GatePassRequest>> fetchHodRequests({
     required String hodId,
     bool onlyOpen = false,
@@ -226,9 +278,11 @@ class GatePassService {
     if (teacher.role != AppRoles.teacher) {
       throw GatePassException('Only class incharge can review this request.');
     }
-    if (request.teacherId != teacher.id) {
-      throw GatePassException('This request is not assigned to your class.');
-    }
+
+    final authority = await _resolveTeacherAuthority(
+      request: request,
+      actor: teacher,
+    );
     if (request.status != RequestStatus.pendingTeacher) {
       throw GatePassException(
         'Request is already processed by class incharge.',
@@ -244,6 +298,12 @@ class GatePassService {
       actedBy: '${teacher.name} (${teacher.role})',
       cancelReason: approve ? null : cancelReason,
       teacherActionAt: DateTime.now(),
+      teacherActionActorId: authority.actorId,
+      teacherActionActorName: authority.actorName,
+      teacherRoleUsedId: authority.roleUsedId,
+      teacherRoleUsedName: authority.roleUsedName,
+      teacherActionAuthorityReason: authority.authorityReason,
+      teacherDelegationRefId: authority.delegationRefId,
     );
   }
 
@@ -286,6 +346,12 @@ class GatePassService {
     DateTime? teacherActionAt,
     DateTime? hodActionAt,
     DateTime? approvedAt,
+    String? teacherActionActorId,
+    String? teacherActionActorName,
+    String? teacherRoleUsedId,
+    String? teacherRoleUsedName,
+    String? teacherActionAuthorityReason,
+    String? teacherDelegationRefId,
   }) async {
     final trimmedReason = cancelReason?.trim();
 
@@ -297,6 +363,24 @@ class GatePassService {
       };
       if (teacherActionAt != null) {
         patch['teacherActionAt'] = Timestamp.fromDate(teacherActionAt);
+      }
+      if (teacherActionActorId != null) {
+        patch['teacherActionActorId'] = teacherActionActorId;
+      }
+      if (teacherActionActorName != null) {
+        patch['teacherActionActorName'] = teacherActionActorName;
+      }
+      if (teacherRoleUsedId != null) {
+        patch['teacherRoleUsedId'] = teacherRoleUsedId;
+      }
+      if (teacherRoleUsedName != null) {
+        patch['teacherRoleUsedName'] = teacherRoleUsedName;
+      }
+      if (teacherActionAuthorityReason != null) {
+        patch['teacherActionAuthorityReason'] = teacherActionAuthorityReason;
+      }
+      if (teacherDelegationRefId != null) {
+        patch['teacherDelegationRefId'] = teacherDelegationRefId;
       }
       if (hodActionAt != null) {
         patch['hodActionAt'] = Timestamp.fromDate(hodActionAt);
@@ -323,8 +407,72 @@ class GatePassService {
       teacherActionAt: teacherActionAt,
       hodActionAt: hodActionAt,
       approvedAt: approvedAt,
+      teacherActionActorId: teacherActionActorId,
+      teacherActionActorName: teacherActionActorName,
+      teacherRoleUsedId: teacherRoleUsedId,
+      teacherRoleUsedName: teacherRoleUsedName,
+      teacherActionAuthorityReason: teacherActionAuthorityReason,
+      teacherDelegationRefId: teacherDelegationRefId,
     );
   }
+
+  Future<_TeacherActionAuthority> _resolveTeacherAuthority({
+    required GatePassRequest request,
+    required AppUser actor,
+  }) async {
+    if (request.teacherId == actor.id) {
+      return _TeacherActionAuthority(
+        actorId: actor.id,
+        actorName: actor.name,
+        roleUsedId: actor.id,
+        roleUsedName: actor.name,
+        authorityReason: 'Primary class incharge',
+        delegationRefId: null,
+      );
+    }
+
+    final delegationService = _delegationService;
+    if (delegationService == null) {
+      throw GatePassException('This request is not assigned to your class.');
+    }
+
+    final delegation = await delegationService.findActiveTeacherDelegation(
+      ownerTeacherId: request.teacherId,
+      delegateTeacherId: actor.id,
+      classroomId: request.classroomId,
+    );
+    if (delegation == null) {
+      throw GatePassException('No active delegation found for this class.');
+    }
+
+    return _TeacherActionAuthority(
+      actorId: actor.id,
+      actorName: actor.name,
+      roleUsedId: delegation.ownerTeacherId,
+      roleUsedName: delegation.ownerTeacherName,
+      authorityReason:
+          'Delegate period active (${delegation.startAt.toIso8601String()} to ${delegation.endAt.toIso8601String()})',
+      delegationRefId: delegation.id,
+    );
+  }
+}
+
+class _TeacherActionAuthority {
+  const _TeacherActionAuthority({
+    required this.actorId,
+    required this.actorName,
+    required this.roleUsedId,
+    required this.roleUsedName,
+    required this.authorityReason,
+    required this.delegationRefId,
+  });
+
+  final String actorId;
+  final String actorName;
+  final String roleUsedId;
+  final String roleUsedName;
+  final String authorityReason;
+  final String? delegationRefId;
 }
 
 class GatePassException implements Exception {

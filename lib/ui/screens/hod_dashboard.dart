@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants.dart';
@@ -9,19 +8,26 @@ import '../../models/app_user.dart';
 import '../../models/classroom.dart';
 import '../../models/gate_pass_request.dart';
 import '../../services/classroom_service.dart';
+import '../../services/delegation_service.dart';
+import '../../services/auth_service.dart';
 import '../../services/gate_pass_service.dart';
+import 'classroom_detail_screen.dart';
 
 class HodDashboard extends StatefulWidget {
   const HodDashboard({
     super.key,
     required this.user,
     required this.classroomService,
+    required this.authService,
+    required this.delegationService,
     required this.gatePassService,
     required this.onLogout,
   });
 
   final AppUser user;
   final ClassroomService classroomService;
+  final AuthService authService;
+  final DelegationService delegationService;
   final GatePassService gatePassService;
   final VoidCallback onLogout;
 
@@ -257,112 +263,167 @@ class _HodDashboardState extends State<HodDashboard> {
     }
   }
 
-  Future<void> _openClassroomDetails(Classroom room) async {
-    final pageContext = context;
-    final status = room.teacherId.isEmpty
-        ? 'Staff not assigned yet'
-        : 'Assigned to ${room.teacherName}';
-    final staffJoinLink = widget.classroomService.buildStaffJoinLink(
-      room.staffCode,
-    );
+  Future<void> _assignDelegateForClass(Classroom room) async {
+    if (room.teacherId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Assign class incharge before delegation.')),
+      );
+      return;
+    }
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(room.section),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                SelectableText(
-                  'Class ID: ${room.id}\n'
-                  'Status: $status\n'
-                  'Staff Join Code: ${room.staffCode}\n'
-                  'Staff Join Link: $staffJoinLink\n'
-                  'Student Code: ${room.studentCode.isEmpty ? 'Generated after staff join' : room.studentCode}',
-                ),
-                const SizedBox(height: 16),
-                const Text('Staff Code QR:'),
-                QrImageView(data: room.staffCode, size: 150),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () async {
-                final shouldDelete = await showDialog<bool>(
-                  context: dialogContext,
-                  builder: (confirmContext) {
-                    return AlertDialog(
-                      title: const Text('Delete Class'),
-                      content: Text(
-                        'Delete ${room.section}?\n\nThis will remove all student memberships of this class.',
-                      ),
-                      actions: <Widget>[
-                        TextButton(
-                          onPressed: () => Navigator.pop(confirmContext, false),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(confirmContext, true),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    );
-                  },
-                );
+    try {
+      final teachers = await widget.authService.fetchTeachersByDepartment(
+        widget.user.department,
+      );
+      final candidates = teachers
+          .where((teacher) => teacher.id != room.teacherId)
+          .toList();
 
-                if (shouldDelete != true) {
-                  return;
-                }
+      if (!mounted) {
+        return;
+      }
 
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                }
-                await _deleteClassroom(room);
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              child: const Text('Delete'),
-            ),
-            TextButton(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(pageContext);
-                await Clipboard.setData(ClipboardData(text: room.staffCode));
-                if (!mounted) {
-                  return;
-                }
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Staff code copied')),
-                );
-              },
-              child: const Text('Copy Code'),
-            ),
-            TextButton(
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(pageContext);
-                await Clipboard.setData(ClipboardData(text: staffJoinLink));
-                if (!mounted) {
-                  return;
-                }
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Staff join link copied')),
-                );
-              },
-              child: const Text('Copy Link'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                await _inviteStaff(room);
-              },
-              child: const Text('Add Staff'),
-            ),
-          ],
+      if (candidates.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No eligible delegate teacher found.')),
         );
-      },
+        return;
+      }
+
+      String selectedTeacherId = candidates.first.id;
+      int selectedDays = 1;
+      final reasonController = TextEditingController(
+        text: 'Class incharge absent',
+      );
+
+      final shouldSave = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (dialogContext, setModalState) {
+              return AlertDialog(
+                title: const Text('Set Delegate'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    DropdownButtonFormField<String>(
+                      value: selectedTeacherId,
+                      decoration: const InputDecoration(
+                        labelText: 'Delegate Teacher',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      items: candidates.map((teacher) {
+                        return DropdownMenuItem<String>(
+                          value: teacher.id,
+                          child: Text('${teacher.name} (${teacher.email})'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setModalState(() => selectedTeacherId = value);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int>(
+                      value: selectedDays,
+                      decoration: const InputDecoration(
+                        labelText: 'Delegate Period',
+                        prefixIcon: Icon(Icons.schedule_outlined),
+                      ),
+                      items: const <int>[1, 2, 3, 5, 7].map((days) {
+                        return DropdownMenuItem<int>(
+                          value: days,
+                          child: Text('$days day${days > 1 ? 's' : ''}'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setModalState(() => selectedDays = value);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason',
+                        hintText: 'Why is delegation allowed?',
+                      ),
+                    ),
+                  ],
+                ),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (shouldSave != true) {
+        return;
+      }
+
+      final delegate = candidates.firstWhere(
+        (teacher) => teacher.id == selectedTeacherId,
+      );
+      final now = DateTime.now();
+      final endAt = now.add(Duration(days: selectedDays));
+
+      await widget.delegationService.upsertTeacherDelegation(
+        ownerTeacherId: room.teacherId,
+        ownerTeacherName: room.teacherName,
+        delegateTeacherId: delegate.id,
+        delegateTeacherName: delegate.name,
+        classroomId: room.id,
+        classroomSection: room.section,
+        hodId: widget.user.id,
+        reason: reasonController.text,
+        startAt: now,
+        endAt: endAt,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Delegation active: ${delegate.name} can approve for ${room.teacherName} until ${DateFormat('dd MMM, hh:mm a').format(endAt)}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<void> _openClassroomDetails(Classroom room) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ClassroomDetailScreen(
+          classroom: room,
+          classroomService: widget.classroomService,
+        ),
+      ),
     );
   }
 
@@ -519,6 +580,13 @@ class _HodDashboardState extends State<HodDashboard> {
     final pending = _requests
         .where((request) => request.status == RequestStatus.forwardedToHod)
         .toList();
+    final history = _requests
+        .where(
+          (request) =>
+              request.status == RequestStatus.approved ||
+              request.status == RequestStatus.rejectedByHod,
+        )
+        .toList();
 
     return Scaffold(
       drawer: Drawer(
@@ -618,6 +686,16 @@ class _HodDashboardState extends State<HodDashboard> {
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             IconButton(
+                              tooltip: 'Add staff',
+                              icon: const Icon(Icons.person_add_alt_1_outlined),
+                              onPressed: () => _inviteStaff(room),
+                            ),
+                            IconButton(
+                              tooltip: 'Set delegate',
+                              icon: const Icon(Icons.swap_horiz_outlined),
+                              onPressed: () => _assignDelegateForClass(room),
+                            ),
+                            IconButton(
                               tooltip: 'Delete class',
                               icon: Icon(
                                 Icons.delete_outline,
@@ -655,7 +733,8 @@ class _HodDashboardState extends State<HodDashboard> {
                               '${request.studentName} - ${request.passType}',
                             ),
                             subtitle: Text(
-                              '${request.classroomSection}\n${DateFormat('dd MMM').format(request.date)} | ${request.outTime} - ${request.inTime}',
+                              '${request.classroomSection}\n${DateFormat('dd MMM').format(request.date)} | ${request.outTime} - ${request.inTime}'
+                              '${(request.teacherActionActorName ?? '').isEmpty ? '' : '\nTeacher action: ${request.teacherActionActorName} as ${request.teacherRoleUsedName ?? '-'}'}',
                             ),
                             isThreeLine: true,
                             trailing: Wrap(
@@ -683,8 +762,46 @@ class _HodDashboardState extends State<HodDashboard> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              _buildHistorySection(history),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistorySection(List<GatePassRequest> history) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Pass History',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (history.isEmpty)
+              const Text('No completed pass history yet.')
+            else
+              ...history.map((request) {
+                final isApproved = request.status == RequestStatus.approved;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    isApproved ? Icons.check_circle : Icons.cancel,
+                    color: isApproved ? Colors.green : Colors.red,
+                  ),
+                  title: Text('${request.studentName} - ${request.passType}'),
+                  subtitle: Text(
+                    '${request.classroomSection}\n${DateFormat('dd MMM yyyy').format(request.date)} | ${request.status}',
+                  ),
+                  isThreeLine: true,
+                );
+              }),
+          ],
         ),
       ),
     );

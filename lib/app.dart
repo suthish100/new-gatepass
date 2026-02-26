@@ -8,6 +8,7 @@ import 'core/constants.dart';
 import 'models/app_user.dart';
 import 'services/auth_service.dart';
 import 'services/classroom_service.dart';
+import 'services/delegation_service.dart';
 import 'services/gate_pass_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/hod_dashboard.dart';
@@ -28,7 +29,10 @@ class _GatePassAppState extends State<GatePassApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final AuthService _authService = AuthService();
   final ClassroomService _classroomService = ClassroomService();
-  final GatePassService _gatePassService = GatePassService();
+  final DelegationService _delegationService = DelegationService();
+  late final GatePassService _gatePassService = GatePassService(
+    delegationService: _delegationService,
+  );
 
   AppLinks? _appLinks;
   StreamSubscription<Uri>? _deepLinkSub;
@@ -330,6 +334,8 @@ class _GatePassAppState extends State<GatePassApp> {
           key: ValueKey<String>('hod_dash_$_dashboardVersion'),
           user: user,
           classroomService: _classroomService,
+          authService: _authService,
+          delegationService: _delegationService,
           gatePassService: _gatePassService,
           onLogout: _logout,
         );

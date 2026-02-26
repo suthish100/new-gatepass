@@ -26,6 +26,12 @@ class GatePassRequest {
     this.approvedAt,
     this.lastActionBy,
     this.cancelReason,
+    this.teacherActionActorId,
+    this.teacherActionActorName,
+    this.teacherRoleUsedId,
+    this.teacherRoleUsedName,
+    this.teacherActionAuthorityReason,
+    this.teacherDelegationRefId,
     // Leave / Native pass specific fields
     this.fromDate,
     this.toDate,
@@ -55,6 +61,12 @@ class GatePassRequest {
   final DateTime? approvedAt;
   final String? lastActionBy;
   final String? cancelReason;
+  final String? teacherActionActorId;
+  final String? teacherActionActorName;
+  final String? teacherRoleUsedId;
+  final String? teacherRoleUsedName;
+  final String? teacherActionAuthorityReason;
+  final String? teacherDelegationRefId;
 
   // Leave pass fields
   final DateTime? fromDate;
@@ -96,6 +108,12 @@ class GatePassRequest {
     DateTime? approvedAt,
     String? lastActionBy,
     String? cancelReason,
+    String? teacherActionActorId,
+    String? teacherActionActorName,
+    String? teacherRoleUsedId,
+    String? teacherRoleUsedName,
+    String? teacherActionAuthorityReason,
+    String? teacherDelegationRefId,
     DateTime? fromDate,
     DateTime? toDate,
     String? destination,
@@ -124,6 +142,15 @@ class GatePassRequest {
       approvedAt: approvedAt ?? this.approvedAt,
       lastActionBy: lastActionBy ?? this.lastActionBy,
       cancelReason: cancelReason ?? this.cancelReason,
+      teacherActionActorId: teacherActionActorId ?? this.teacherActionActorId,
+      teacherActionActorName:
+          teacherActionActorName ?? this.teacherActionActorName,
+      teacherRoleUsedId: teacherRoleUsedId ?? this.teacherRoleUsedId,
+      teacherRoleUsedName: teacherRoleUsedName ?? this.teacherRoleUsedName,
+      teacherActionAuthorityReason:
+          teacherActionAuthorityReason ?? this.teacherActionAuthorityReason,
+      teacherDelegationRefId:
+          teacherDelegationRefId ?? this.teacherDelegationRefId,
       fromDate: fromDate ?? this.fromDate,
       toDate: toDate ?? this.toDate,
       destination: destination ?? this.destination,
@@ -155,6 +182,12 @@ class GatePassRequest {
       'approvedAt': approvedAt == null ? null : Timestamp.fromDate(approvedAt!),
       'lastActionBy': lastActionBy,
       'cancelReason': cancelReason,
+      'teacherActionActorId': teacherActionActorId,
+      'teacherActionActorName': teacherActionActorName,
+      'teacherRoleUsedId': teacherRoleUsedId,
+      'teacherRoleUsedName': teacherRoleUsedName,
+      'teacherActionAuthorityReason': teacherActionAuthorityReason,
+      'teacherDelegationRefId': teacherDelegationRefId,
       'fromDate': fromDate == null ? null : Timestamp.fromDate(fromDate!),
       'toDate': toDate == null ? null : Timestamp.fromDate(toDate!),
       'destination': destination,
@@ -201,6 +234,13 @@ class GatePassRequest {
       approvedAt: parseOptionalDate(map['approvedAt']),
       lastActionBy: map['lastActionBy'] as String?,
       cancelReason: map['cancelReason'] as String?,
+      teacherActionActorId: map['teacherActionActorId'] as String?,
+      teacherActionActorName: map['teacherActionActorName'] as String?,
+      teacherRoleUsedId: map['teacherRoleUsedId'] as String?,
+      teacherRoleUsedName: map['teacherRoleUsedName'] as String?,
+      teacherActionAuthorityReason:
+          map['teacherActionAuthorityReason'] as String?,
+      teacherDelegationRefId: map['teacherDelegationRefId'] as String?,
       fromDate: parseOptionalDate(map['fromDate']),
       toDate: parseOptionalDate(map['toDate']),
       destination: map['destination'] as String?,

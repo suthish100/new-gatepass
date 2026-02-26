@@ -50,8 +50,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     try {
       final classrooms = await widget.classroomService
           .fetchClassroomsForTeacher(widget.user.id);
-      final requests = await widget.gatePassService.fetchTeacherRequests(
-        teacherId: widget.user.id,
+      final requests = await widget.gatePassService.fetchTeacherActionableRequests(
+        teacher: widget.user,
       );
 
       _membersByClassroom.clear();
@@ -259,6 +259,9 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     final pending = _requests
         .where((request) => request.status == RequestStatus.pendingTeacher)
         .toList();
+    final history = _requests
+        .where((request) => request.status != RequestStatus.pendingTeacher)
+        .toList();
 
     return Scaffold(
       drawer: Drawer(
@@ -324,6 +327,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                     _welcomeCard(canJoin: canJoin),
                     const SizedBox(height: 12),
                     _buildPendingSection(pending),
+                    const SizedBox(height: 12),
+                    _buildHistorySection(history),
                     const SizedBox(height: 12),
                     Text(
                       'Assigned Classes',
@@ -409,7 +414,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                     contentPadding: EdgeInsets.zero,
                     title: Text('${request.studentName} - ${request.passType}'),
                     subtitle: Text(
-                      '${request.classroomSection}\n${DateFormat('dd MMM').format(request.date)} | ${request.outTime} - ${request.inTime}',
+                      '${request.classroomSection}\n${DateFormat('dd MMM').format(request.date)} | ${request.outTime} - ${request.inTime}'
+                      '${request.teacherId != widget.user.id ? '\nDelegated approval access' : ''}',
                     ),
                     isThreeLine: true,
                     trailing: Wrap(
@@ -461,6 +467,49 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               ),
             ),
             const Icon(Icons.school_outlined, size: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistorySection(List<GatePassRequest> history) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Pass History',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            if (history.isEmpty)
+              const Text('No pass history available yet.')
+            else
+              ...history.map((request) {
+                final status = request.status;
+                Color color = Colors.orange;
+                IconData icon = Icons.forward_to_inbox_outlined;
+                if (status == RequestStatus.approved) {
+                  color = Colors.green;
+                  icon = Icons.check_circle;
+                } else if (status == RequestStatus.rejectedByTeacher ||
+                    status == RequestStatus.rejectedByHod) {
+                  color = Colors.red;
+                  icon = Icons.cancel;
+                }
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(icon, color: color),
+                  title: Text('${request.studentName} - ${request.passType}'),
+                  subtitle: Text(
+                    '${request.classroomSection}\n${DateFormat('dd MMM yyyy').format(request.date)} | $status',
+                  ),
+                  isThreeLine: true,
+                );
+              }),
           ],
         ),
       ),
