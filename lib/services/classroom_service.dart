@@ -20,6 +20,16 @@ class ClassroomService {
 
   FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
+  String buildStaffJoinLink(String staffCode) {
+    final normalizedCode = _normalizeCode(staffCode);
+    if (normalizedCode.isEmpty) {
+      return '';
+    }
+    return Uri.https(_linkHost, '/join', <String, String>{
+      'code': normalizedCode,
+    }).toString();
+  }
+
   Future<StaffInvite> sendStaffInvitation({
     required String hodId,
     required String section,
@@ -108,16 +118,24 @@ class ClassroomService {
     required AppUser hod,
     required String year,
     required String department,
+    String? sectionSuffix,
   }) async {
     if (hod.role != AppRoles.hod) {
       throw ClassroomException('Only HOD can create class rooms.');
     }
 
-    await _ensureHodCanCreateYear(hod: hod, year: year);
+    await _ensureHodCanCreateYear(
+      hod: hod,
+      year: year,
+      sectionSuffix: sectionSuffix,
+    );
 
     final now = DateTime.now();
     final staffCode = await _generateUniqueCode();
-    final section = '$year - $department';
+    final normalizedSuffix = sectionSuffix?.trim().toUpperCase() ?? '';
+    final section = normalizedSuffix.isEmpty
+        ? '$year - $department'
+        : '$year - $department - $normalizedSuffix';
 
     final room = Classroom(
       id: '',
@@ -139,10 +157,6 @@ class ClassroomService {
       final doc = _firestore.collection('classrooms').doc();
       final saved = room.copyWith(id: doc.id);
       await doc.set(saved.toMap());
-      if (kDebugMode) {
-        debugPrint('HOD created class room: ${saved.section}');
-        debugPrint('Staff join code: ${saved.staffCode}');
-      }
       return saved;
     }
 
@@ -150,10 +164,6 @@ class ClassroomService {
       id: 'class_${DateTime.now().microsecondsSinceEpoch}',
     );
     _localClassrooms.insert(0, saved);
-    if (kDebugMode) {
-      debugPrint('HOD created class room: ${saved.section}');
-      debugPrint('Staff join code: ${saved.staffCode}');
-    }
     return saved;
   }
 
@@ -577,9 +587,11 @@ class ClassroomService {
   Future<void> _ensureHodCanCreateYear({
     required AppUser hod,
     required String year,
+    String? sectionSuffix,
   }) async {
     final existing = await fetchClassroomsForHod(hod.id);
     final isFirstYearHod = hod.hodType == HodType.firstYear;
+    final normalizedSuffix = sectionSuffix?.trim().toUpperCase() ?? '';
 
     if (isFirstYearHod) {
       if (year != classYears.first) {
@@ -587,24 +599,43 @@ class ClassroomService {
           'First year HOD can create only I Year class.',
         );
       }
-      if (existing.isNotEmpty) {
+      if (existing.length >= 3) {
         throw ClassroomException(
-          'First year HOD can keep only one common class.',
+          'First year HOD can keep at most three classes.',
         );
       }
-      return;
+    } else {
+      const seniorYears = <String>['II Year', 'III Year', 'IV Year'];
+      if (!seniorYears.contains(year)) {
+        throw ClassroomException(
+          'Senior HOD can create only II Year, III Year and IV Year classes.',
+        );
+      }
     }
 
-    const seniorYears = <String>['II Year', 'III Year', 'IV Year'];
-    if (!seniorYears.contains(year)) {
+    final sameYear = existing.where((room) => room.year == year).toList();
+    if (sameYear.length >= 3) {
       throw ClassroomException(
-        'Senior HOD can create only II Year, III Year and IV Year classes.',
+        'Maximum three classes already exist for $year.',
       );
     }
 
-    final duplicate = existing.any((room) => room.year == year);
+    final duplicate = existing.any((room) {
+      if (room.year != year) {
+        return false;
+      }
+      if (normalizedSuffix.isEmpty) {
+        return true;
+      }
+      return room.section.trim().toUpperCase().endsWith(' - $normalizedSuffix');
+    });
     if (duplicate) {
-      throw ClassroomException('Class already exists for $year.');
+      if (normalizedSuffix.isEmpty) {
+        throw ClassroomException('Class already exists for $year.');
+      }
+      throw ClassroomException(
+        'Class already exists for $year section $normalizedSuffix.',
+      );
     }
   }
 

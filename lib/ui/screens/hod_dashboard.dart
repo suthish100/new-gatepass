@@ -30,6 +30,8 @@ class HodDashboard extends StatefulWidget {
 }
 
 class _HodDashboardState extends State<HodDashboard> {
+  static const List<String> _defaultSections = <String>['A', 'B', 'C'];
+
   bool _loading = true;
   String? _errorMessage;
   List<Classroom> _classrooms = <Classroom>[];
@@ -48,27 +50,44 @@ class _HodDashboardState extends State<HodDashboard> {
         await _ensureDefaultClasses();
       } catch (error) {
         if (mounted) {
-          setState(() => _errorMessage = 'Class Creation Error: \${error.toString()}');
+          setState(
+            () => _errorMessage = 'Class Creation Error: ${error.toString()}',
+          );
         }
       }
+      String? fetchError;
+
       try {
         final classrooms = await widget.classroomService.fetchClassroomsForHod(
           widget.user.id,
         );
+        if (mounted) {
+          setState(() => _classrooms = classrooms);
+        }
+      } catch (error) {
+        fetchError = 'Classes: $error';
+      }
+
+      try {
         final requests = await widget.gatePassService.fetchHodRequests(
           hodId: widget.user.id,
         );
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _classrooms = classrooms;
-          _requests = requests;
-        });
-      } catch (error) {
         if (mounted) {
-          setState(() => _errorMessage = 'Fetch Error: \${error.toString()}');
+          setState(() => _requests = requests);
         }
+      } catch (error) {
+        final requestError = 'Queue: $error';
+        fetchError = fetchError == null
+            ? requestError
+            : '$fetchError | $requestError';
+      }
+
+      if (mounted) {
+        setState(
+          () => _errorMessage = fetchError == null
+              ? null
+              : 'Fetch Error: $fetchError',
+        );
       }
     } finally {
       if (mounted) {
@@ -81,21 +100,29 @@ class _HodDashboardState extends State<HodDashboard> {
     final existing = await widget.classroomService.fetchClassroomsForHod(
       widget.user.id,
     );
-    final existingYears = existing.map((room) => room.year).toSet();
+    final existingSections = existing
+        .map((room) => room.section.trim().toUpperCase())
+        .toSet();
 
     final years = widget.user.hodType == HodType.firstYear
         ? <String>[classYears.first]
         : <String>['II Year', 'III Year', 'IV Year'];
 
     for (final year in years) {
-      if (existingYears.contains(year)) {
-        continue;
+      for (final section in _defaultSections) {
+        final sectionName = '$year - ${widget.user.department} - $section'
+            .trim()
+            .toUpperCase();
+        if (existingSections.contains(sectionName)) {
+          continue;
+        }
+        await widget.classroomService.createClassroomByHod(
+          hod: widget.user,
+          year: year,
+          department: widget.user.department,
+          sectionSuffix: section,
+        );
       }
-      await widget.classroomService.createClassroomByHod(
-        hod: widget.user,
-        year: year,
-        department: widget.user.department,
-      );
     }
   }
 
@@ -183,6 +210,9 @@ class _HodDashboardState extends State<HodDashboard> {
     final status = room.teacherId.isEmpty
         ? 'Staff not assigned yet'
         : 'Assigned to ${room.teacherName}';
+    final staffJoinLink = widget.classroomService.buildStaffJoinLink(
+      room.staffCode,
+    );
 
     await showDialog<void>(
       context: context,
@@ -196,6 +226,7 @@ class _HodDashboardState extends State<HodDashboard> {
                 SelectableText(
                   'Status: $status\n'
                   'Staff Join Code: ${room.staffCode}\n'
+                  'Staff Join Link: $staffJoinLink\n'
                   'Student Code: ${room.studentCode.isEmpty ? 'Generated after staff join' : room.studentCode}',
                 ),
                 const SizedBox(height: 16),
@@ -217,6 +248,19 @@ class _HodDashboardState extends State<HodDashboard> {
                 );
               },
               child: const Text('Copy Code'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                await Clipboard.setData(ClipboardData(text: staffJoinLink));
+                if (!mounted) {
+                  return;
+                }
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Staff join link copied')),
+                );
+              },
+              child: const Text('Copy Link'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -377,8 +421,8 @@ class _HodDashboardState extends State<HodDashboard> {
                   leading: const Icon(Icons.school_outlined),
                   title: Text(
                     widget.user.hodType == HodType.firstYear
-                        ? 'Default: Single First Year Class'
-                        : 'Default: II, III, IV Year Classes',
+                        ? 'Default: I Year A, B, C Classes'
+                        : 'Default: II, III, IV Year (A, B, C) Classes',
                   ),
                   subtitle: Text('Department: ${widget.user.department}'),
                 ),
@@ -393,10 +437,13 @@ class _HodDashboardState extends State<HodDashboard> {
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: Text(
-                      _errorMessage ?? 'No classes found. Pull to refresh or check HOD registration type.',
+                      _errorMessage ??
+                          'No classes found. Pull to refresh or check HOD registration type.',
                       style: TextStyle(
                         color: _errorMessage != null ? Colors.red : null,
-                        fontWeight: _errorMessage != null ? FontWeight.bold : null,
+                        fontWeight: _errorMessage != null
+                            ? FontWeight.bold
+                            : null,
                       ),
                     ),
                   ),
@@ -410,9 +457,10 @@ class _HodDashboardState extends State<HodDashboard> {
                         title: Text(room.section),
                         subtitle: Text(
                           room.teacherId.isEmpty
-                              ? 'Staff pending | code: ${room.staffCode}'
-                              : 'Assigned: ${room.teacherName} | code: ${room.staffCode}',
+                              ? 'Staff pending | code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}'
+                              : 'Assigned: ${room.teacherName} | code: ${room.staffCode}\n${widget.classroomService.buildStaffJoinLink(room.staffCode)}',
                         ),
+                        isThreeLine: true,
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _openClassroomDetails(room),
                       ),

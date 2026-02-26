@@ -65,6 +65,7 @@ service cloud.firestore {
     match /gate_pass_requests/{requestId} {
       allow read: if isSignedIn() &&
         (
+          isHod() ||
           resource.data.studentId == request.auth.uid ||
           resource.data.teacherId == request.auth.uid ||
           resource.data.hodId == request.auth.uid
