@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -9,24 +11,35 @@ import '../../models/app_user.dart';
 import '../../models/classroom.dart';
 import '../../models/classroom_member.dart';
 import '../../models/gate_pass_request.dart';
+import '../../services/auth_service.dart';
 import '../../services/classroom_service.dart';
 import '../../services/gate_pass_service.dart';
 import '../widgets/join_class_shortcut_box.dart';
 import 'join_class_screen.dart';
+import 'profile_screen.dart';
+import 'request_detail_screen.dart';
 
 class TeacherDashboard extends StatefulWidget {
   const TeacherDashboard({
     super.key,
     required this.user,
+    required this.authService,
     required this.classroomService,
     required this.gatePassService,
     required this.onLogout,
+    required this.isDarkMode,
+    required this.onThemeChanged,
+    required this.onUserUpdated,
   });
 
   final AppUser user;
+  final AuthService authService;
   final ClassroomService classroomService;
   final GatePassService gatePassService;
   final VoidCallback onLogout;
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+  final ValueChanged<AppUser> onUserUpdated;
 
   @override
   State<TeacherDashboard> createState() => _TeacherDashboardState();
@@ -174,6 +187,29 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     }
   }
 
+  Future<void> _openRequestDetails({
+    required GatePassRequest request,
+    required bool allowActions,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RequestDetailScreen(
+          request: request,
+          onApprove: allowActions
+              ? () async {
+                  await _reviewRequest(request: request, approve: true);
+                }
+              : null,
+          onReject: allowActions
+              ? () async {
+                  await _reviewRequest(request: request, approve: false);
+                }
+              : null,
+        ),
+      ),
+    );
+  }
+
   Future<void> _inviteStudent(Classroom room) async {
     final emailController = TextEditingController();
 
@@ -281,11 +317,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                 _loadData();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
-              onTap: widget.onLogout,
-            ),
           ],
         ),
       ),
@@ -294,13 +325,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         actions: <Widget>[
           IconButton(
             tooltip: 'Profile',
-            onPressed: _showProfile,
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
+            onPressed: _openProfile,
+            icon: _buildProfileActionIcon(),
           ),
         ],
       ),
@@ -366,29 +392,41 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     );
   }
 
-  void _showProfile() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                widget.user.name,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text('Role: ${widget.user.role}'),
-              Text('Email: ${widget.user.email}'),
-              Text('Department: ${widget.user.department}'),
-              Text('Section/Year: ${widget.user.year ?? '-'}'),
-            ],
-          ),
-        );
-      },
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileScreen(
+          user: widget.user,
+          authService: widget.authService,
+          isDarkMode: widget.isDarkMode,
+          onUserUpdated: widget.onUserUpdated,
+          onThemeChanged: widget.onThemeChanged,
+          onLogout: () async => widget.onLogout(),
+        ),
+      ),
+    );
+  }
+
+  Uint8List? get _profileImageBytes {
+    final encoded = widget.user.profileImageBase64;
+    if ((encoded ?? '').isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(encoded!);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildProfileActionIcon() {
+    final bytes = _profileImageBytes;
+    if (bytes == null) {
+      return const Icon(Icons.account_circle_outlined);
+    }
+    return CircleAvatar(
+      radius: 14,
+      backgroundImage: MemoryImage(bytes),
     );
   }
 
@@ -418,20 +456,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                       '${request.teacherId != widget.user.id ? '\nDelegated approval access' : ''}',
                     ),
                     isThreeLine: true,
-                    trailing: Wrap(
-                      spacing: 6,
-                      children: <Widget>[
-                        OutlinedButton(
-                          onPressed: () =>
-                              _reviewRequest(request: request, approve: false),
-                          child: const Text('Reject'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () =>
-                              _reviewRequest(request: request, approve: true),
-                          child: const Text('Approve'),
-                        ),
-                      ],
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openRequestDetails(
+                      request: request,
+                      allowActions: true,
                     ),
                   ),
                 );
@@ -508,6 +536,11 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                     '${request.classroomSection}\n${DateFormat('dd MMM yyyy').format(request.date)} | $status',
                   ),
                   isThreeLine: true,
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _openRequestDetails(
+                    request: request,
+                    allowActions: false,
+                  ),
                 );
               }),
           ],

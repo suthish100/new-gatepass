@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -5,6 +8,7 @@ import '../../core/constants.dart';
 import '../../models/app_user.dart';
 import '../../models/classroom.dart';
 import '../../models/gate_pass_request.dart';
+import '../../services/auth_service.dart';
 import '../../services/classroom_service.dart';
 import '../../services/gate_pass_service.dart';
 import '../widgets/join_class_shortcut_box.dart';
@@ -12,20 +16,29 @@ import '../widgets/pass_status_card.dart';
 import 'approved_pass_screen.dart';
 import 'create_pass_screen.dart';
 import 'join_class_screen.dart';
+import 'profile_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({
     super.key,
     required this.user,
+    required this.authService,
     required this.classroomService,
     required this.gatePassService,
     required this.onLogout,
+    required this.isDarkMode,
+    required this.onThemeChanged,
+    required this.onUserUpdated,
   });
 
   final AppUser user;
+  final AuthService authService;
   final ClassroomService classroomService;
   final GatePassService gatePassService;
   final VoidCallback onLogout;
+  final bool isDarkMode;
+  final ValueChanged<bool> onThemeChanged;
+  final ValueChanged<AppUser> onUserUpdated;
 
   @override
   State<StudentDashboard> createState() => _StudentDashboardState();
@@ -159,8 +172,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Icon(Icons.account_circle,
-                      color: Colors.white, size: 40),
+                  if (_profileImageBytes != null)
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundImage: MemoryImage(_profileImageBytes!),
+                    )
+                  else
+                    const Icon(Icons.account_circle, color: Colors.white, size: 40),
                   const SizedBox(height: 8),
                   Text(
                     widget.user.name,
@@ -189,11 +207,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 _loadData();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
-              onTap: widget.onLogout,
-            ),
+            
           ],
         ),
       ),
@@ -202,13 +216,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
         actions: <Widget>[
           IconButton(
             tooltip: 'Profile',
-            onPressed: _showProfile,
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          IconButton(
-            tooltip: 'Logout',
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
+            onPressed: _openProfile,
+            icon: _buildProfileActionIcon(),
           ),
         ],
       ),
@@ -351,60 +360,41 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  void _showProfile() {
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileScreen(
+          user: widget.user,
+          authService: widget.authService,
+          isDarkMode: widget.isDarkMode,
+          onUserUpdated: widget.onUserUpdated,
+          onThemeChanged: widget.onThemeChanged,
+          onLogout: () async => widget.onLogout(),
+        ),
       ),
-      builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                widget.user.name,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              _profileRow('Role', widget.user.role),
-              _profileRow('Email', widget.user.email),
-              _profileRow('Department', widget.user.department),
-              _profileRow('Year', widget.user.year ?? '—'),
-            ],
-          ),
-        );
-      },
     );
   }
 
-  Widget _profileRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 90,
-              child: Text(label,
-                  style: const TextStyle(color: Colors.grey, fontSize: 13))),
-          Expanded(
-              child: Text(value,
-                  style: const TextStyle(fontWeight: FontWeight.w500))),
-        ],
-      ),
+  Uint8List? get _profileImageBytes {
+    final encoded = widget.user.profileImageBase64;
+    if ((encoded ?? '').isEmpty) {
+      return null;
+    }
+    try {
+      return base64Decode(encoded!);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildProfileActionIcon() {
+    final bytes = _profileImageBytes;
+    if (bytes == null) {
+      return const Icon(Icons.account_circle_outlined);
+    }
+    return CircleAvatar(
+      radius: 14,
+      backgroundImage: MemoryImage(bytes),
     );
   }
 

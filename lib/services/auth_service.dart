@@ -164,6 +164,48 @@ class AuthService {
         .toList();
   }
 
+  Future<AppUser> updateProfile({
+    required AppUser user,
+    String? name,
+    String? phoneNumber,
+    String? parentPhoneNumber,
+    String? profileImageBase64,
+    String? themeMode,
+  }) async {
+    final updatedUser = user.copyWith(
+      name: name?.trim().isNotEmpty == true ? name!.trim() : user.name,
+      phoneNumber: phoneNumber?.trim(),
+      parentPhoneNumber: parentPhoneNumber?.trim(),
+      profileImageBase64: profileImageBase64,
+      themeMode: themeMode,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore.collection('users').doc(user.id).update(
+        <String, dynamic>{
+          'name': updatedUser.name,
+          'phoneNumber': updatedUser.phoneNumber,
+          'parentPhoneNumber': updatedUser.parentPhoneNumber,
+          'profileImageBase64': updatedUser.profileImageBase64,
+          'themeMode': updatedUser.themeMode,
+        },
+      );
+      return updatedUser;
+    }
+
+    final localRecord = _localUsers[user.email];
+    if (localRecord != null) {
+      _localUsers[user.email] = _LocalUserRecord(
+        user: updatedUser,
+        password: localRecord.password,
+      );
+    }
+    if (_localSession?.id == user.id) {
+      _localSession = updatedUser;
+    }
+    return updatedUser;
+  }
+
   AppUser? get localSession => _localSession;
 
   void _seedLocalUsers() {

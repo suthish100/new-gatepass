@@ -45,6 +45,7 @@ class _GatePassAppState extends State<GatePassApp> {
   int _dashboardVersion = 0;
   bool _joinFlowOpen = false;
   bool _joinFlowScheduled = false;
+  bool _isDarkMode = false;
 
   @override
   void initState() {
@@ -196,8 +197,17 @@ class _GatePassAppState extends State<GatePassApp> {
       _selectedRole = null;
       _prefillYearOrSection = null;
       _authStartInRegisterMode = false;
+      _isDarkMode = user.themeMode == 'dark';
     });
     _scheduleJoinScreenFromLink();
+  }
+
+  void _onUserUpdated(AppUser user) {
+    setState(() => _currentUser = user);
+  }
+
+  void _onThemeChanged(bool isDarkMode) {
+    setState(() => _isDarkMode = isDarkMode);
   }
 
   Future<void> _logout() async {
@@ -292,6 +302,8 @@ class _GatePassAppState extends State<GatePassApp> {
       title: 'E-Gate Pass System',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.classicBlueTheme,
+      darkTheme: AppTheme.classicDarkTheme,
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: _buildCurrentPage(),
@@ -338,23 +350,34 @@ class _GatePassAppState extends State<GatePassApp> {
           delegationService: _delegationService,
           gatePassService: _gatePassService,
           onLogout: _logout,
+          isDarkMode: _isDarkMode,
+          onThemeChanged: _onThemeChanged,
+          onUserUpdated: _onUserUpdated,
         );
       case AppRoles.teacher:
         return TeacherDashboard(
           key: ValueKey<String>('teacher_dash_$_dashboardVersion'),
           user: user,
+          authService: _authService,
           classroomService: _classroomService,
           gatePassService: _gatePassService,
           onLogout: _logout,
+          isDarkMode: _isDarkMode,
+          onThemeChanged: _onThemeChanged,
+          onUserUpdated: _onUserUpdated,
         );
       case AppRoles.student:
       default:
         return StudentDashboard(
           key: ValueKey<String>('student_dash_$_dashboardVersion'),
           user: user,
+          authService: _authService,
           classroomService: _classroomService,
           gatePassService: _gatePassService,
           onLogout: _logout,
+          isDarkMode: _isDarkMode,
+          onThemeChanged: _onThemeChanged,
+          onUserUpdated: _onUserUpdated,
         );
     }
   }
