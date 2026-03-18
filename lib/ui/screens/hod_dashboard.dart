@@ -121,7 +121,7 @@ class _HodDashboardState extends State<HodDashboard> {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   DropdownButtonFormField<String>(
-                    value: selectedYear,
+                    initialValue: selectedYear,
                     decoration: const InputDecoration(
                       labelText: 'Year',
                       prefixIcon: Icon(Icons.calendar_view_month_outlined),
@@ -317,7 +317,7 @@ class _HodDashboardState extends State<HodDashboard> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     DropdownButtonFormField<String>(
-                      value: selectedTeacherId,
+                      initialValue: selectedTeacherId,
                       decoration: const InputDecoration(
                         labelText: 'Delegate Teacher',
                         prefixIcon: Icon(Icons.person_outline),
@@ -337,7 +337,7 @@ class _HodDashboardState extends State<HodDashboard> {
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<int>(
-                      value: selectedDays,
+                      initialValue: selectedDays,
                       decoration: const InputDecoration(
                         labelText: 'Delegate Period',
                         prefixIcon: Icon(Icons.schedule_outlined),

@@ -150,6 +150,11 @@ class ClassroomService {
       studentCode: '',
       code: '',
       inviteLink: '',
+      hodDelegatedFinalApproverId: null,
+      hodDelegatedFinalApproverName: null,
+      hodDelegationReason: null,
+      hodDelegationStartAt: null,
+      hodDelegationEndAt: null,
       createdAt: now,
     );
 
@@ -247,6 +252,11 @@ class ClassroomService {
       studentCode: studentCode,
       code: studentCode,
       inviteLink: inviteLink,
+      hodDelegatedFinalApproverId: null,
+      hodDelegatedFinalApproverName: null,
+      hodDelegationReason: null,
+      hodDelegationStartAt: null,
+      hodDelegationEndAt: null,
       createdAt: now,
     );
 
@@ -298,6 +308,139 @@ class ClassroomService {
         .where((room) => room.teacherId == teacherId)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  Future<Classroom?> fetchClassroomById(String classroomId) async {
+    if (classroomId.trim().isEmpty) {
+      return null;
+    }
+
+    if (FirebaseBootstrap.isReady) {
+      final snapshot = await _firestore
+          .collection('classrooms')
+          .doc(classroomId)
+          .get();
+      final data = snapshot.data();
+      if (data == null) {
+        return null;
+      }
+      return Classroom.fromMap(data, snapshot.id);
+    }
+
+    try {
+      return _localClassrooms.firstWhere((room) => room.id == classroomId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Classroom> setTeacherAsHodDelegate({
+    required AppUser hod,
+    required Classroom classroom,
+    required int durationDays,
+    required String reason,
+  }) async {
+    if (hod.role != AppRoles.hod) {
+      throw ClassroomException('Only HOD can set delegated final approval.');
+    }
+    if (classroom.hodId != hod.id) {
+      throw ClassroomException(
+        'This class is not assigned to your HOD account.',
+      );
+    }
+    if (classroom.teacherId.isEmpty) {
+      throw ClassroomException(
+        'Assign class incharge before enabling single approver mode.',
+      );
+    }
+    if (durationDays < 1) {
+      throw ClassroomException('Delegation duration must be at least 1 day.');
+    }
+
+    final startAt = DateTime.now();
+    final endAt = startAt.add(Duration(days: durationDays));
+    final updated = classroom.copyWith(
+      hodDelegatedFinalApproverId: classroom.teacherId,
+      hodDelegatedFinalApproverName: classroom.teacherName,
+      hodDelegationReason: reason.trim().isEmpty
+          ? 'Final approval delegated by HOD'
+          : reason.trim(),
+      hodDelegationStartAt: startAt,
+      hodDelegationEndAt: endAt,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore
+          .collection('classrooms')
+          .doc(classroom.id)
+          .update(updated.toMap());
+      return updated;
+    }
+
+    final index = _localClassrooms.indexWhere(
+      (room) => room.id == classroom.id,
+    );
+    if (index >= 0) {
+      _localClassrooms[index] = updated;
+    }
+    return updated;
+  }
+
+  Future<Classroom> clearTeacherAsHodDelegate({
+    required AppUser hod,
+    required Classroom classroom,
+  }) async {
+    if (hod.role != AppRoles.hod) {
+      throw ClassroomException('Only HOD can clear delegated final approval.');
+    }
+    if (classroom.hodId != hod.id) {
+      throw ClassroomException(
+        'This class is not assigned to your HOD account.',
+      );
+    }
+
+    final updated = Classroom(
+      id: classroom.id,
+      section: classroom.section,
+      year: classroom.year,
+      department: classroom.department,
+      hodId: classroom.hodId,
+      teacherId: classroom.teacherId,
+      teacherName: classroom.teacherName,
+      teacherEmail: classroom.teacherEmail,
+      staffCode: classroom.staffCode,
+      studentCode: classroom.studentCode,
+      code: classroom.code,
+      inviteLink: classroom.inviteLink,
+      hodDelegatedFinalApproverId: null,
+      hodDelegatedFinalApproverName: null,
+      hodDelegationReason: null,
+      hodDelegationStartAt: null,
+      hodDelegationEndAt: null,
+      createdAt: classroom.createdAt,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore
+          .collection('classrooms')
+          .doc(classroom.id)
+          .update(<String, dynamic>{
+            'hodDelegatedFinalApproverId': null,
+            'hodDelegatedFinalApproverName': null,
+            'hodDelegationReason': null,
+            'hodDelegationStartAt': null,
+            'hodDelegationEndAt': null,
+          });
+      return updated;
+    }
+
+    final index = _localClassrooms.indexWhere(
+      (room) => room.id == classroom.id,
+    );
+    if (index >= 0) {
+      _localClassrooms[index] = updated;
+    }
+    return updated;
   }
 
   Future<List<ClassroomMember>> fetchStudentsForClassroom(

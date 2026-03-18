@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -11,12 +8,14 @@ import '../../models/gate_pass_request.dart';
 import '../../services/auth_service.dart';
 import '../../services/classroom_service.dart';
 import '../../services/gate_pass_service.dart';
+import '../widgets/dashboard_drawer.dart';
 import '../widgets/join_class_shortcut_box.dart';
 import '../widgets/pass_status_card.dart';
 import 'approved_pass_screen.dart';
 import 'create_pass_screen.dart';
 import 'join_class_screen.dart';
 import 'profile_screen.dart';
+import 'request_detail_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({
@@ -96,12 +95,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
       return true;
     } catch (error) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
       return false;
     }
   }
 
+  // ignore: unused_element
   Future<void> _openCreatePass() async {
     if (_joinedClassrooms.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -161,66 +162,16 @@ class _StudentDashboardState extends State<StudentDashboard> {
         .toList();
 
     return Scaffold(
-      drawer: Drawer(
-        child: ListView(
-          children: <Widget>[
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (_profileImageBytes != null)
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundImage: MemoryImage(_profileImageBytes!),
-                    )
-                  else
-                    const Icon(Icons.account_circle, color: Colors.white, size: 40),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.user.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    widget.user.department,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.dashboard_outlined),
-              title: const Text('Dashboard'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text('Refresh'),
-              onTap: () {
-                Navigator.pop(context);
-                _loadData();
-              },
-            ),
-            
-          ],
-        ),
+      drawer: DashboardDrawer(
+        user: widget.user,
+        title: 'Student Dashboard',
+        onRefresh: _loadData,
+        onProfile: _openProfile,
+        footerNote: hasClass
+            ? 'Joined classes: ${_joinedClassrooms.length}'
+            : 'Join a class to start requesting passes.',
       ),
-      appBar: AppBar(
-        title: const Text('Student Dashboard'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'Profile',
-            onPressed: _openProfile,
-            icon: _buildProfileActionIcon(),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Student Dashboard')),
       body: SafeArea(
         child: Row(
           children: <Widget>[
@@ -254,8 +205,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              const Icon(Icons.info_outline,
-                                  color: Colors.orange),
+                              const Icon(
+                                Icons.info_outline,
+                                color: Colors.orange,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -271,8 +224,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       Text(
                         '📚 ${_joinedClassrooms.map((c) => c.section).join(', ')}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey.shade600,
-                            ),
+                          color: Colors.grey.shade600,
+                        ),
                       ),
 
                     const SizedBox(height: 12),
@@ -352,7 +305,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
           children: [
             const Icon(Icons.access_time, size: 16),
             const SizedBox(width: 8),
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 13))),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontSize: 13)),
+            ),
             const Icon(Icons.chevron_right, size: 16),
           ],
         ),
@@ -375,29 +330,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Uint8List? get _profileImageBytes {
-    final encoded = widget.user.profileImageBase64;
-    if ((encoded ?? '').isEmpty) {
-      return null;
-    }
-    try {
-      return base64Decode(encoded!);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Widget _buildProfileActionIcon() {
-    final bytes = _profileImageBytes;
-    if (bytes == null) {
-      return const Icon(Icons.account_circle_outlined);
-    }
-    return CircleAvatar(
-      radius: 14,
-      backgroundImage: MemoryImage(bytes),
-    );
-  }
-
   Widget _buildCreateSection(bool hasClass) {
     if (!hasClass) return const SizedBox.shrink();
 
@@ -412,7 +344,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
             if (_joinedClassrooms.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content: Text('Join a class before creating a pass.')),
+                  content: Text('Join a class before creating a pass.'),
+                ),
               );
               return;
             }
@@ -431,8 +364,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content:
-                        Text('✅ Pass request submitted to Class Incharge!')),
+                  content: Text('✅ Pass request submitted to Class Incharge!'),
+                ),
               );
               setState(() => _tabIndex = 1);
             }
@@ -448,7 +381,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
             if (_joinedClassrooms.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content: Text('Join a class before creating a pass.')),
+                  content: Text('Join a class before creating a pass.'),
+                ),
               );
               return;
             }
@@ -467,8 +401,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                    content:
-                        Text('✅ Leave request submitted to Class Incharge!')),
+                  content: Text('✅ Leave request submitted to Class Incharge!'),
+                ),
               );
               setState(() => _tabIndex = 1);
             }
@@ -485,10 +419,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 Expanded(
                   child: Text(
                     'Request flow: You → Class Incharge → HOD → Approved Digital Pass',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.grey.shade600),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
                   ),
                 ),
               ],
@@ -528,13 +461,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 12)),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -553,8 +494,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              Icon(Icons.check_circle_outline,
-                  color: Colors.green.shade400, size: 48),
+              Icon(
+                Icons.check_circle_outline,
+                color: Colors.green.shade400,
+                size: 48,
+              ),
               const SizedBox(height: 12),
               const Text(
                 'No active pass requests.',
@@ -591,8 +535,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              Icon(Icons.history_outlined,
-                  color: Colors.grey.shade400, size: 48),
+              Icon(
+                Icons.history_outlined,
+                color: Colors.grey.shade400,
+                size: 48,
+              ),
               const SizedBox(height: 12),
               const Text('No pass history yet.'),
             ],
@@ -604,11 +551,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
     return Column(
       children: history.map((request) {
         final isApproved = request.status == RequestStatus.approved;
-        final isRejected = request.status == RequestStatus.rejectedByTeacher ||
+        final isRejected =
+            request.status == RequestStatus.rejectedByTeacher ||
             request.status == RequestStatus.rejectedByHod;
 
-        Color statusColor =
-            isApproved ? Colors.green : (isRejected ? Colors.red : Colors.grey);
+        Color statusColor = isApproved
+            ? Colors.green
+            : (isRejected ? Colors.red : Colors.grey);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -633,7 +582,17 @@ class _StudentDashboardState extends State<StudentDashboard> {
               ),
               isThreeLine: true,
               trailing: const Icon(Icons.chevron_right),
-              onTap: isApproved ? () => _openApprovedPass(request) : null,
+              onTap: () {
+                if (isApproved) {
+                  _openApprovedPass(request);
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RequestDetailScreen(request: request),
+                  ),
+                );
+              },
             ),
           ),
         );

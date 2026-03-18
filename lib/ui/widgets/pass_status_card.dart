@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/gate_pass_request.dart';
 
-
 /// Shows the live status timeline of a gate pass request.
 /// Used in the "Pass Status" tab of the student dashboard.
 class PassStatusCard extends StatelessWidget {
@@ -46,8 +45,10 @@ class PassStatusCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withAlpha(25),
                     borderRadius: BorderRadius.circular(20),
@@ -64,8 +65,10 @@ class PassStatusCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: request.isLeavePass
                         ? Colors.orange.shade50
@@ -107,8 +110,7 @@ class PassStatusCard extends StatelessWidget {
             _timelineStep(
               context,
               label: 'Submitted',
-              subLabel:
-                  DateFormat('dd MMM, hh:mm a').format(request.createdAt),
+              subLabel: DateFormat('dd MMM, hh:mm a').format(request.createdAt),
               state: _StepState.done,
             ),
             _timelineLine(),
@@ -118,13 +120,13 @@ class PassStatusCard extends StatelessWidget {
               subLabel: isRejectedByTeacher
                   ? 'Rejected${request.cancelReason != null ? ": ${request.cancelReason}" : ""}'
                   : request.teacherActionAt != null
-                      ? 'Approved — ${DateFormat('dd MMM, hh:mm a').format(request.teacherActionAt!)}'
-                      : 'Awaiting review…',
+                  ? 'Approved — ${DateFormat('dd MMM, hh:mm a').format(request.teacherActionAt!)}'
+                  : 'Awaiting review…',
               state: isRejectedByTeacher
                   ? _StepState.rejected
                   : request.teacherActionAt != null
-                      ? _StepState.done
-                      : _StepState.pending,
+                  ? _StepState.done
+                  : _StepState.pending,
             ),
             _timelineLine(),
             _timelineStep(
@@ -133,17 +135,17 @@ class PassStatusCard extends StatelessWidget {
               subLabel: isRejectedByHod
                   ? 'Rejected${request.cancelReason != null ? ": ${request.cancelReason}" : ""}'
                   : isApproved
-                      ? 'Approved — ${request.hodActionAt != null ? DateFormat('dd MMM, hh:mm a').format(request.hodActionAt!) : ""}'
-                      : isPendingTeacher
-                          ? 'Waiting for class incharge…'
-                          : isForwardedHod
-                              ? 'Awaiting HOD review…'
-                              : '—',
+                  ? 'Approved — ${request.hodActionAt != null ? DateFormat('dd MMM, hh:mm a').format(request.hodActionAt!) : ""}'
+                  : isPendingTeacher
+                  ? 'Waiting for class incharge…'
+                  : isForwardedHod
+                  ? 'Awaiting HOD review…'
+                  : '—',
               state: isRejectedByHod
                   ? _StepState.rejected
                   : isApproved
-                      ? _StepState.done
-                      : _StepState.pending,
+                  ? _StepState.done
+                  : _StepState.pending,
             ),
 
             if (isApproved) ...[
@@ -172,14 +174,19 @@ class PassStatusCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.cancel_outlined,
-                        color: Colors.red.shade700, size: 16),
+                    Icon(
+                      Icons.cancel_outlined,
+                      color: Colors.red.shade700,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Rejection Reason: ${request.cancelReason}',
                         style: TextStyle(
-                            color: Colors.red.shade800, fontSize: 12),
+                          color: Colors.red.shade800,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -202,12 +209,10 @@ class PassStatusCard extends StatelessWidget {
     Widget dotContent = const SizedBox();
     if (state == _StepState.done) {
       dotColor = Colors.green.shade400;
-      dotContent =
-          const Icon(Icons.check, color: Colors.white, size: 12);
+      dotContent = const Icon(Icons.check, color: Colors.white, size: 12);
     } else if (state == _StepState.rejected) {
       dotColor = Colors.red.shade400;
-      dotContent =
-          const Icon(Icons.close, color: Colors.white, size: 12);
+      dotContent = const Icon(Icons.close, color: Colors.white, size: 12);
     }
 
     return Row(
@@ -216,10 +221,7 @@ class PassStatusCard extends StatelessWidget {
         Container(
           width: 22,
           height: 22,
-          decoration: BoxDecoration(
-            color: dotColor,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           child: Center(child: dotContent),
         ),
         const SizedBox(width: 10),
@@ -227,12 +229,17 @@ class PassStatusCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-              Text(subLabel,
-                  style: TextStyle(
-                      color: Colors.grey.shade600, fontSize: 11)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                subLabel,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+              ),
             ],
           ),
         ),

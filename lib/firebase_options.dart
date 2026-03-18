@@ -72,5 +72,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'egatepass-b9da7.firebasestorage.app',
     measurementId: 'G-6BYECTMR3C',
   );
-
 }

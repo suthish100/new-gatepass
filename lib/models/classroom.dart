@@ -14,6 +14,11 @@ class Classroom {
     required this.studentCode,
     required this.code,
     required this.inviteLink,
+    this.hodDelegatedFinalApproverId,
+    this.hodDelegatedFinalApproverName,
+    this.hodDelegationReason,
+    this.hodDelegationStartAt,
+    this.hodDelegationEndAt,
     required this.createdAt,
   });
 
@@ -29,7 +34,22 @@ class Classroom {
   final String studentCode;
   final String code;
   final String inviteLink;
+  final String? hodDelegatedFinalApproverId;
+  final String? hodDelegatedFinalApproverName;
+  final String? hodDelegationReason;
+  final DateTime? hodDelegationStartAt;
+  final DateTime? hodDelegationEndAt;
   final DateTime createdAt;
+
+  bool get hasActiveHodDelegation {
+    final now = DateTime.now();
+    return hodDelegatedFinalApproverId != null &&
+        hodDelegatedFinalApproverId!.isNotEmpty &&
+        hodDelegationStartAt != null &&
+        hodDelegationEndAt != null &&
+        !now.isBefore(hodDelegationStartAt!) &&
+        !now.isAfter(hodDelegationEndAt!);
+  }
 
   Classroom copyWith({
     String? id,
@@ -44,6 +64,11 @@ class Classroom {
     String? studentCode,
     String? code,
     String? inviteLink,
+    String? hodDelegatedFinalApproverId,
+    String? hodDelegatedFinalApproverName,
+    String? hodDelegationReason,
+    DateTime? hodDelegationStartAt,
+    DateTime? hodDelegationEndAt,
     DateTime? createdAt,
   }) {
     return Classroom(
@@ -59,6 +84,13 @@ class Classroom {
       studentCode: studentCode ?? this.studentCode,
       code: code ?? this.code,
       inviteLink: inviteLink ?? this.inviteLink,
+      hodDelegatedFinalApproverId:
+          hodDelegatedFinalApproverId ?? this.hodDelegatedFinalApproverId,
+      hodDelegatedFinalApproverName:
+          hodDelegatedFinalApproverName ?? this.hodDelegatedFinalApproverName,
+      hodDelegationReason: hodDelegationReason ?? this.hodDelegationReason,
+      hodDelegationStartAt: hodDelegationStartAt ?? this.hodDelegationStartAt,
+      hodDelegationEndAt: hodDelegationEndAt ?? this.hodDelegationEndAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -76,12 +108,23 @@ class Classroom {
       'studentCode': studentCode,
       'code': code,
       'inviteLink': inviteLink,
+      'hodDelegatedFinalApproverId': hodDelegatedFinalApproverId,
+      'hodDelegatedFinalApproverName': hodDelegatedFinalApproverName,
+      'hodDelegationReason': hodDelegationReason,
+      'hodDelegationStartAt': hodDelegationStartAt == null
+          ? null
+          : Timestamp.fromDate(hodDelegationStartAt!),
+      'hodDelegationEndAt': hodDelegationEndAt == null
+          ? null
+          : Timestamp.fromDate(hodDelegationEndAt!),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
   factory Classroom.fromMap(Map<String, dynamic> map, String id) {
     final created = map['createdAt'];
+    final hodDelegationStartAt = map['hodDelegationStartAt'];
+    final hodDelegationEndAt = map['hodDelegationEndAt'];
     DateTime createdAt;
     if (created is Timestamp) {
       createdAt = created.toDate();
@@ -112,6 +155,17 @@ class Classroom {
       studentCode: studentCode,
       code: map['code'] as String? ?? studentCode,
       inviteLink: map['inviteLink'] as String? ?? '',
+      hodDelegatedFinalApproverId:
+          map['hodDelegatedFinalApproverId'] as String?,
+      hodDelegatedFinalApproverName:
+          map['hodDelegatedFinalApproverName'] as String?,
+      hodDelegationReason: map['hodDelegationReason'] as String?,
+      hodDelegationStartAt: hodDelegationStartAt is Timestamp
+          ? hodDelegationStartAt.toDate()
+          : hodDelegationStartAt as DateTime?,
+      hodDelegationEndAt: hodDelegationEndAt is Timestamp
+          ? hodDelegationEndAt.toDate()
+          : hodDelegationEndAt as DateTime?,
       createdAt: createdAt,
     );
   }

@@ -186,7 +186,7 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
-                            value: _department,
+                            initialValue: _department,
                             decoration: const InputDecoration(
                               labelText: 'Department',
                               prefixIcon: Icon(Icons.school_outlined),
@@ -207,7 +207,7 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
                           if (widget.role == AppRoles.hod) ...<Widget>[
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              value: _hodType,
+                              initialValue: _hodType,
                               decoration: const InputDecoration(
                                 labelText: 'HOD Type',
                                 prefixIcon: Icon(Icons.badge_outlined),
@@ -229,7 +229,7 @@ class _RoleAuthScreenState extends State<RoleAuthScreen> {
                           if (widget.role != AppRoles.hod) ...<Widget>[
                             const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
-                              value: _yearOrSection,
+                              initialValue: _yearOrSection,
                               decoration: InputDecoration(
                                 labelText: widget.role == AppRoles.teacher
                                     ? 'Class Section'

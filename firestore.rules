@@ -57,6 +57,40 @@ service cloud.firestore {
         request.time <= get(specificPath).data.endAt;
     }
 
+    function canAccessOwnPass() {
+      return isSignedIn() &&
+        (
+          isHod() ||
+          resource.data.studentId == request.auth.uid ||
+          resource.data.teacherId == request.auth.uid ||
+          resource.data.hodId == request.auth.uid
+        );
+    }
+
+    function isPublicApprovedPass() {
+      return resource.data.status == 'Approved';
+    }
+
+    function canWritePublicScanFields() {
+      let changed = request.resource.data.diff(resource.data).changedKeys();
+      return isPublicApprovedPass() &&
+        resource.data.usedAt == null &&
+        changed.hasOnly(['usedAt', 'usedBy', 'usedByDevice']) &&
+        request.resource.data.usedAt is timestamp &&
+        request.resource.data.usedBy is string &&
+        request.resource.data.usedByDevice is string;
+    }
+
+    function isValidScanHistoryCreate() {
+      return request.resource.data.passId is string &&
+        request.resource.data.outcome is string &&
+        request.resource.data.message is string &&
+        request.resource.data.scannedAt is timestamp &&
+        request.resource.data.scanSource is string &&
+        request.resource.data.wasOffline is bool &&
+        request.resource.data.pendingSync is bool;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
@@ -100,25 +134,30 @@ service cloud.firestore {
     }
 
     match /gate_pass_requests/{requestId} {
-      allow read: if isSignedIn() &&
-        (
-          isHod() ||
-          resource.data.studentId == request.auth.uid ||
-          resource.data.teacherId == request.auth.uid ||
-          resource.data.hodId == request.auth.uid
-        );
+      allow get: if canAccessOwnPass() || isPublicApprovedPass();
+      allow list: if canAccessOwnPass();
       allow create: if isStudent() &&
         request.resource.data.studentId == request.auth.uid;
-      allow update: if isSignedIn() &&
+      allow update: if
         (
-          resource.data.teacherId == request.auth.uid ||
-          resource.data.hodId == request.auth.uid ||
+          isSignedIn() &&
           (
-            isTeacher() &&
-            hasActiveTeacherDelegation(resource.data.teacherId, resource.data.classroomId)
+            resource.data.teacherId == request.auth.uid ||
+            resource.data.hodId == request.auth.uid ||
+            (
+              isTeacher() &&
+              hasActiveTeacherDelegation(resource.data.teacherId, resource.data.classroomId)
+            )
           )
-        );
+        ) ||
+        canWritePublicScanFields();
       allow delete: if false;
+    }
+
+    match /gate_pass_scan_history/{scanId} {
+      allow get, list: if isSignedIn();
+      allow create: if isValidScanHistoryCreate();
+      allow update, delete: if false;
     }
   }
 }

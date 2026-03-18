@@ -7,6 +7,7 @@ class GatePassRequest {
     required this.id,
     required this.studentId,
     required this.studentName,
+    this.studentPhotoBase64,
     required this.registerNumber,
     required this.studentClass,
     required this.department,
@@ -24,6 +25,9 @@ class GatePassRequest {
     this.teacherActionAt,
     this.hodActionAt,
     this.approvedAt,
+    this.usedAt,
+    this.usedBy,
+    this.usedByDevice,
     this.lastActionBy,
     this.cancelReason,
     this.teacherActionActorId,
@@ -32,7 +36,6 @@ class GatePassRequest {
     this.teacherRoleUsedName,
     this.teacherActionAuthorityReason,
     this.teacherDelegationRefId,
-    // Leave / Native pass specific fields
     this.fromDate,
     this.toDate,
     this.destination,
@@ -42,6 +45,7 @@ class GatePassRequest {
   final String id;
   final String studentId;
   final String studentName;
+  final String? studentPhotoBase64;
   final String registerNumber;
   final String studentClass;
   final String department;
@@ -59,6 +63,9 @@ class GatePassRequest {
   final DateTime? teacherActionAt;
   final DateTime? hodActionAt;
   final DateTime? approvedAt;
+  final DateTime? usedAt;
+  final String? usedBy;
+  final String? usedByDevice;
   final String? lastActionBy;
   final String? cancelReason;
   final String? teacherActionActorId;
@@ -67,8 +74,6 @@ class GatePassRequest {
   final String? teacherRoleUsedName;
   final String? teacherActionAuthorityReason;
   final String? teacherDelegationRefId;
-
-  // Leave pass fields
   final DateTime? fromDate;
   final DateTime? toDate;
   final String? destination;
@@ -82,13 +87,30 @@ class GatePassRequest {
 
   bool get isLeavePass => passType == PassType.leave;
 
-  /// QR data string — encodes the pass identity for gate security scanning
-  String get qrData => 'EGATEPASS|$id|$studentId|$status';
+  bool get isUsed => usedAt != null;
+
+  /// QR payload should only reveal the pass identity.
+  String get qrData => id;
+
+  bool isValidOn(DateTime moment) {
+    final current = DateTime(moment.year, moment.month, moment.day);
+    if (isLeavePass) {
+      final start = fromDate ?? date;
+      final end = toDate ?? fromDate ?? date;
+      final startDay = DateTime(start.year, start.month, start.day);
+      final endDay = DateTime(end.year, end.month, end.day);
+      return !current.isBefore(startDay) && !current.isAfter(endDay);
+    }
+
+    final passDay = DateTime(date.year, date.month, date.day);
+    return current == passDay;
+  }
 
   GatePassRequest copyWith({
     String? id,
     String? studentId,
     String? studentName,
+    String? studentPhotoBase64,
     String? registerNumber,
     String? studentClass,
     String? department,
@@ -106,6 +128,9 @@ class GatePassRequest {
     DateTime? teacherActionAt,
     DateTime? hodActionAt,
     DateTime? approvedAt,
+    DateTime? usedAt,
+    String? usedBy,
+    String? usedByDevice,
     String? lastActionBy,
     String? cancelReason,
     String? teacherActionActorId,
@@ -123,6 +148,7 @@ class GatePassRequest {
       id: id ?? this.id,
       studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
+      studentPhotoBase64: studentPhotoBase64 ?? this.studentPhotoBase64,
       registerNumber: registerNumber ?? this.registerNumber,
       studentClass: studentClass ?? this.studentClass,
       department: department ?? this.department,
@@ -140,6 +166,9 @@ class GatePassRequest {
       teacherActionAt: teacherActionAt ?? this.teacherActionAt,
       hodActionAt: hodActionAt ?? this.hodActionAt,
       approvedAt: approvedAt ?? this.approvedAt,
+      usedAt: usedAt ?? this.usedAt,
+      usedBy: usedBy ?? this.usedBy,
+      usedByDevice: usedByDevice ?? this.usedByDevice,
       lastActionBy: lastActionBy ?? this.lastActionBy,
       cancelReason: cancelReason ?? this.cancelReason,
       teacherActionActorId: teacherActionActorId ?? this.teacherActionActorId,
@@ -160,8 +189,10 @@ class GatePassRequest {
 
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
+      'id': id,
       'studentId': studentId,
       'studentName': studentName,
+      'studentPhotoBase64': studentPhotoBase64,
       'registerNumber': registerNumber,
       'studentClass': studentClass,
       'department': department,
@@ -176,10 +207,16 @@ class GatePassRequest {
       'reason': reason,
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
-      'teacherActionAt':
-          teacherActionAt == null ? null : Timestamp.fromDate(teacherActionAt!),
-      'hodActionAt': hodActionAt == null ? null : Timestamp.fromDate(hodActionAt!),
+      'teacherActionAt': teacherActionAt == null
+          ? null
+          : Timestamp.fromDate(teacherActionAt!),
+      'hodActionAt': hodActionAt == null
+          ? null
+          : Timestamp.fromDate(hodActionAt!),
       'approvedAt': approvedAt == null ? null : Timestamp.fromDate(approvedAt!),
+      'usedAt': usedAt == null ? null : Timestamp.fromDate(usedAt!),
+      'usedBy': usedBy,
+      'usedByDevice': usedByDevice,
       'lastActionBy': lastActionBy,
       'cancelReason': cancelReason,
       'teacherActionActorId': teacherActionActorId,
@@ -195,10 +232,56 @@ class GatePassRequest {
     };
   }
 
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'studentId': studentId,
+      'studentName': studentName,
+      'studentPhotoBase64': studentPhotoBase64,
+      'registerNumber': registerNumber,
+      'studentClass': studentClass,
+      'department': department,
+      'classroomId': classroomId,
+      'classroomSection': classroomSection,
+      'teacherId': teacherId,
+      'hodId': hodId,
+      'passType': passType,
+      'date': date.toIso8601String(),
+      'outTime': outTime,
+      'inTime': inTime,
+      'reason': reason,
+      'status': status,
+      'createdAt': createdAt.toIso8601String(),
+      'teacherActionAt': teacherActionAt?.toIso8601String(),
+      'hodActionAt': hodActionAt?.toIso8601String(),
+      'approvedAt': approvedAt?.toIso8601String(),
+      'usedAt': usedAt?.toIso8601String(),
+      'usedBy': usedBy,
+      'usedByDevice': usedByDevice,
+      'lastActionBy': lastActionBy,
+      'cancelReason': cancelReason,
+      'teacherActionActorId': teacherActionActorId,
+      'teacherActionActorName': teacherActionActorName,
+      'teacherRoleUsedId': teacherRoleUsedId,
+      'teacherRoleUsedName': teacherRoleUsedName,
+      'teacherActionAuthorityReason': teacherActionAuthorityReason,
+      'teacherDelegationRefId': teacherDelegationRefId,
+      'fromDate': fromDate?.toIso8601String(),
+      'toDate': toDate?.toIso8601String(),
+      'destination': destination,
+      'parentContact': parentContact,
+    };
+  }
+
+  factory GatePassRequest.fromJson(Map<String, dynamic> json) {
+    return GatePassRequest.fromMap(json, json['id'] as String? ?? '');
+  }
+
   factory GatePassRequest.fromMap(Map<String, dynamic> map, String id) {
     DateTime parseDate(dynamic value) {
       if (value is Timestamp) return value.toDate();
       if (value is DateTime) return value;
+      if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
       return DateTime.now();
     }
 
@@ -206,6 +289,7 @@ class GatePassRequest {
       if (value == null) return null;
       if (value is Timestamp) return value.toDate();
       if (value is DateTime) return value;
+      if (value is String) return DateTime.tryParse(value);
       return null;
     }
 
@@ -214,7 +298,9 @@ class GatePassRequest {
     return GatePassRequest(
       id: id,
       studentId: map['studentId'] as String? ?? '',
-      studentName: map['studentName'] as String? ?? map['name'] as String? ?? '',
+      studentName:
+          map['studentName'] as String? ?? map['name'] as String? ?? '',
+      studentPhotoBase64: map['studentPhotoBase64'] as String?,
       registerNumber: map['registerNumber'] as String? ?? '',
       studentClass: map['studentClass'] as String? ?? '',
       department: map['department'] as String? ?? '',
@@ -232,6 +318,9 @@ class GatePassRequest {
       teacherActionAt: parseOptionalDate(map['teacherActionAt']),
       hodActionAt: parseOptionalDate(map['hodActionAt']),
       approvedAt: parseOptionalDate(map['approvedAt']),
+      usedAt: parseOptionalDate(map['usedAt']),
+      usedBy: map['usedBy'] as String?,
+      usedByDevice: map['usedByDevice'] as String?,
       lastActionBy: map['lastActionBy'] as String?,
       cancelReason: map['cancelReason'] as String?,
       teacherActionActorId: map['teacherActionActorId'] as String?,

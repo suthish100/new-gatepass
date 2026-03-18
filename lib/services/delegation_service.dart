@@ -32,10 +32,14 @@ class DelegationService {
       throw DelegationException('Invalid owner/delegate teacher id.');
     }
     if (ownerTeacherId == delegateTeacherId) {
-      throw DelegationException('Owner and delegate cannot be the same teacher.');
+      throw DelegationException(
+        'Owner and delegate cannot be the same teacher.',
+      );
     }
     if (!endAt.isAfter(startAt)) {
-      throw DelegationException('Delegation end time must be after start time.');
+      throw DelegationException(
+        'Delegation end time must be after start time.',
+      );
     }
     if (classroomId.trim().isEmpty) {
       throw DelegationException('Classroom id is required for delegation.');
@@ -55,7 +59,9 @@ class DelegationService {
       classroomId: classroomId,
       classroomSection: classroomSection,
       hodId: hodId,
-      reason: reason.trim().isEmpty ? 'Delegation enabled by HOD' : reason.trim(),
+      reason: reason.trim().isEmpty
+          ? 'Delegation enabled by HOD'
+          : reason.trim(),
       startAt: startAt,
       endAt: endAt,
       isActive: true,
@@ -93,7 +99,9 @@ class DelegationService {
           .where((item) => item.delegateTeacherId == delegateTeacherId)
           .where((item) => item.classroomId == classroomId)
           .where((item) => item.isActive)
-          .where((item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt))
+          .where(
+            (item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt),
+          )
           .toList();
       if (delegations.isEmpty) {
         return null;
@@ -107,7 +115,9 @@ class DelegationService {
         .where((item) => item.delegateTeacherId == delegateTeacherId)
         .where((item) => item.classroomId == classroomId)
         .where((item) => item.isActive)
-        .where((item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt))
+        .where(
+          (item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt),
+        )
         .toList();
     if (delegations.isEmpty) {
       return null;
@@ -130,14 +140,18 @@ class DelegationService {
       return snapshot.docs
           .map((doc) => TeacherDelegation.fromMap(doc.data(), doc.id))
           .where((item) => item.isActive)
-          .where((item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt))
+          .where(
+            (item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt),
+          )
           .toList();
     }
 
     return _localDelegations
         .where((item) => item.delegateTeacherId == delegateTeacherId)
         .where((item) => item.isActive)
-        .where((item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt))
+        .where(
+          (item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt),
+        )
         .toList();
   }
 }

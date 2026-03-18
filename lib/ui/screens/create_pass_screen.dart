@@ -218,7 +218,7 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
               Text('Class', style: theme.textTheme.titleSmall),
               const SizedBox(height: 6),
               DropdownButtonFormField<Classroom>(
-                value: _selectedClassroom,
+                initialValue: _selectedClassroom,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   contentPadding:

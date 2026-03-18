@@ -24,6 +24,7 @@ class AuthService {
     required String department,
     String? year,
     String? hodType,
+    String? parentPhoneNumber,
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
@@ -42,6 +43,7 @@ class AuthService {
         department: department,
         year: year,
         hodType: hodType,
+        parentPhoneNumber: parentPhoneNumber?.trim(),
       );
       await _firestore.collection('users').doc(uid).set(user.toMap());
       return user;
@@ -59,6 +61,7 @@ class AuthService {
       department: department,
       year: year,
       hodType: hodType,
+      parentPhoneNumber: parentPhoneNumber?.trim(),
     );
     _localUsers[normalizedEmail] = _LocalUserRecord(
       user: localUser,
@@ -181,15 +184,16 @@ class AuthService {
     );
 
     if (FirebaseBootstrap.isReady) {
-      await _firestore.collection('users').doc(user.id).update(
-        <String, dynamic>{
-          'name': updatedUser.name,
-          'phoneNumber': updatedUser.phoneNumber,
-          'parentPhoneNumber': updatedUser.parentPhoneNumber,
-          'profileImageBase64': updatedUser.profileImageBase64,
-          'themeMode': updatedUser.themeMode,
-        },
-      );
+      await _firestore
+          .collection('users')
+          .doc(user.id)
+          .update(<String, dynamic>{
+            'name': updatedUser.name,
+            'phoneNumber': updatedUser.phoneNumber,
+            'parentPhoneNumber': updatedUser.parentPhoneNumber,
+            'profileImageBase64': updatedUser.profileImageBase64,
+            'themeMode': updatedUser.themeMode,
+          });
       return updatedUser;
     }
 

@@ -97,10 +97,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _openEditProfile() async {
     final updated = await Navigator.of(context).push<AppUser>(
       MaterialPageRoute<AppUser>(
-        builder: (_) => EditProfileScreen(
-          user: _user,
-          authService: widget.authService,
-        ),
+        builder: (_) =>
+            EditProfileScreen(user: _user, authService: widget.authService),
       ),
     );
 
@@ -156,6 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final avatarBytes = _profileBytes;
+    final showParentPhone = _user.role == 'Student';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -188,7 +187,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _profileRow('name', _user.name),
           _profileRow('Department', _user.department),
           _profileRow('phone no', _user.phoneNumber ?? '-'),
-          _profileRow('parents phone no', _user.parentPhoneNumber ?? '-'),
+          if (showParentPhone)
+            _profileRow('parents phone no', _user.parentPhoneNumber ?? '-'),
           const SizedBox(height: 20),
           _menuButton(label: 'Edit profile', onPressed: _openEditProfile),
           const SizedBox(height: 10),
@@ -200,16 +200,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _menuButton({
-    required String label,
-    required VoidCallback onPressed,
-  }) {
+  Widget _menuButton({required String label, required VoidCallback onPressed}) {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        child: Text(label),
-      ),
+      child: ElevatedButton(onPressed: onPressed, child: Text(label)),
     );
   }
 
@@ -264,7 +258,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.user.name);
-    _phoneController = TextEditingController(text: widget.user.phoneNumber ?? '');
+    _phoneController = TextEditingController(
+      text: widget.user.phoneNumber ?? '',
+    );
     _parentPhoneController = TextEditingController(
       text: widget.user.parentPhoneNumber ?? '',
     );
@@ -282,13 +278,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final showParentPhone = widget.user.role == 'Student';
     setState(() => _saving = true);
     try {
       final updated = await widget.authService.updateProfile(
         user: widget.user,
         name: _nameController.text,
         phoneNumber: _phoneController.text,
-        parentPhoneNumber: _parentPhoneController.text,
+        parentPhoneNumber: showParentPhone
+            ? _parentPhoneController.text
+            : widget.user.parentPhoneNumber,
       );
       if (!mounted) {
         return;
@@ -310,6 +309,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showParentPhone = widget.user.role == 'Student';
     return Scaffold(
       appBar: AppBar(title: const Text('Edit Profile')),
       body: Form(
@@ -339,12 +339,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               keyboardType: TextInputType.phone,
               decoration: const InputDecoration(labelText: 'Phone Number'),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _parentPhoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Parent Phone Number'),
-            ),
+            if (showParentPhone) ...<Widget>[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _parentPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Parent Phone Number',
+                ),
+                validator: (value) {
+                  if ((value ?? '').trim().isEmpty) {
+                    return 'Parent phone number is required';
+                  }
+                  return null;
+                },
+              ),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _save,

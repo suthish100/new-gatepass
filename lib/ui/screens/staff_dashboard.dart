@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +12,7 @@ import '../../models/gate_pass_request.dart';
 import '../../services/auth_service.dart';
 import '../../services/classroom_service.dart';
 import '../../services/gate_pass_service.dart';
+import '../widgets/dashboard_drawer.dart';
 import '../widgets/join_class_shortcut_box.dart';
 import 'join_class_screen.dart';
 import 'profile_screen.dart';
@@ -63,9 +62,8 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     try {
       final classrooms = await widget.classroomService
           .fetchClassroomsForTeacher(widget.user.id);
-      final requests = await widget.gatePassService.fetchTeacherActionableRequests(
-        teacher: widget.user,
-      );
+      final requests = await widget.gatePassService
+          .fetchTeacherActionableRequests(teacher: widget.user);
 
       _membersByClassroom.clear();
       for (final room in classrooms) {
@@ -158,7 +156,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     }
 
     try {
-      await widget.gatePassService.teacherAction(
+      final nextStatus = await widget.gatePassService.teacherAction(
         request: request,
         teacher: widget.user,
         approve: approve,
@@ -171,9 +169,13 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            approve
+            !approve
+                ? 'Request rejected and student notified.'
+                : nextStatus == RequestStatus.approved
+                ? 'Request approved using HOD single-approver delegation.'
+                : approve
                 ? 'Request forwarded to HOD.'
-                : 'Request rejected and student notified.',
+                : 'Request updated.',
           ),
         ),
       );
@@ -300,36 +302,16 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         .toList();
 
     return Scaffold(
-      drawer: Drawer(
-        child: ListView(
-          children: <Widget>[
-            const DrawerHeader(child: Text('Class Incharge Navigation')),
-            ListTile(
-              leading: const Icon(Icons.dashboard_outlined),
-              title: const Text('Dashboard'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text('Refresh'),
-              onTap: () {
-                Navigator.pop(context);
-                _loadData();
-              },
-            ),
-          ],
-        ),
+      drawer: DashboardDrawer(
+        user: widget.user,
+        title: 'Class Incharge Dashboard',
+        onRefresh: _loadData,
+        onProfile: _openProfile,
+        footerNote: canJoin
+            ? 'Use your HOD staff code once to claim a class.'
+            : 'Assigned classes: ${_classrooms.length}',
       ),
-      appBar: AppBar(
-        title: const Text('Class Incharge Dashboard'),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'Profile',
-            onPressed: _openProfile,
-            icon: _buildProfileActionIcon(),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Class Incharge Dashboard')),
       body: SafeArea(
         child: Row(
           children: <Widget>[
@@ -404,29 +386,6 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           onLogout: () async => widget.onLogout(),
         ),
       ),
-    );
-  }
-
-  Uint8List? get _profileImageBytes {
-    final encoded = widget.user.profileImageBase64;
-    if ((encoded ?? '').isEmpty) {
-      return null;
-    }
-    try {
-      return base64Decode(encoded!);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Widget _buildProfileActionIcon() {
-    final bytes = _profileImageBytes;
-    if (bytes == null) {
-      return const Icon(Icons.account_circle_outlined);
-    }
-    return CircleAvatar(
-      radius: 14,
-      backgroundImage: MemoryImage(bytes),
     );
   }
 

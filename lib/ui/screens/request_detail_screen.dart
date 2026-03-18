@@ -17,6 +17,9 @@ class RequestDetailScreen extends StatelessWidget {
   final Future<void> Function()? onReject;
 
   bool get _isLeavePass => request.isLeavePass;
+  bool get _isRejected =>
+      request.status == RequestStatus.rejectedByTeacher ||
+      request.status == RequestStatus.rejectedByHod;
 
   String _labelForStatus(String status) {
     switch (status) {
@@ -41,9 +44,7 @@ class RequestDetailScreen extends StatelessWidget {
     final hasActions = onApprove != null || onReject != null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Student Request Form'),
-      ),
+      appBar: AppBar(title: const Text('Student Request Form')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
@@ -119,7 +120,9 @@ class RequestDetailScreen extends StatelessWidget {
                 children: <Widget>[
                   _detailRow(
                     'Requested At',
-                    DateFormat('dd MMM yyyy, hh:mm a').format(request.createdAt),
+                    DateFormat(
+                      'dd MMM yyyy, hh:mm a',
+                    ).format(request.createdAt),
                   ),
                   _detailRow(
                     'Teacher Action',
@@ -143,8 +146,13 @@ class RequestDetailScreen extends StatelessWidget {
                         ? '-'
                         : request.lastActionBy!,
                   ),
+                  if ((request.teacherActionAuthorityReason ?? '').isNotEmpty)
+                    _detailRow(
+                      'Approval Notes',
+                      request.teacherActionAuthorityReason!,
+                    ),
                   _detailRow(
-                    'Cancel Reason',
+                    _isRejected ? 'Rejection Reason' : 'Cancel Reason',
                     (request.cancelReason ?? '').isEmpty
                         ? '-'
                         : request.cancelReason!,

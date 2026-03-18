@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -5,13 +7,20 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/gate_pass_request.dart';
 
-/// Displays the approved digital gate pass card with QR code.
-/// For outing pass: shows date, in/out time, reason.
-/// For leave pass: shows formal letter style with dates and destination.
 class ApprovedPassScreen extends StatelessWidget {
   const ApprovedPassScreen({super.key, required this.request});
 
   final GatePassRequest request;
+
+  Uint8List? get _photoBytes {
+    final encoded = request.studentPhotoBase64;
+    if (encoded == null || encoded.isEmpty) return null;
+    try {
+      return base64Decode(encoded);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +29,7 @@ class ApprovedPassScreen extends StatelessWidget {
     final dateFormat = DateFormat('dd MMM yyyy');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
+      backgroundColor: const Color(0xFFF4F5F7),
       appBar: AppBar(
         title: Text(isLeave ? 'Leave Permission Pass' : 'Gate Pass'),
         actions: [
@@ -41,12 +50,15 @@ class ApprovedPassScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Column(
           children: [
-            // Approved banner
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.green.shade600,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                gradient: const LinearGradient(
+                  colors: <Color>[Color(0xFF0F8F53), Color(0xFF1FA971)],
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(18),
+                ),
               ),
               padding: const EdgeInsets.symmetric(vertical: 14),
               child: const Row(
@@ -66,18 +78,18 @@ class ApprovedPassScreen extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Pass card body
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(18),
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(20),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withAlpha(18),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
@@ -85,104 +97,73 @@ class ApprovedPassScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header info row
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _studentPhotoCard(),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: _typeChip(isLeave),
+                            ),
+                            const SizedBox(height: 8),
                             Text(
                               request.studentName,
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             Text(
                               'Reg: ${request.registerNumber}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: Colors.grey.shade700,
                               ),
                             ),
+                            Text(
+                              '${request.department} | ${request.studentClass}',
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                            Text(
+                              request.classroomSection,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isLeave
-                              ? Colors.orange.shade50
-                              : Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isLeave
-                                ? Colors.orange.shade300
-                                : Colors.blue.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          request.passType,
-                          style: TextStyle(
-                            color: isLeave
-                                ? Colors.orange.shade800
-                                : Colors.blue.shade800,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
                         ),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 4),
-                  Text(
-                    '${request.department} | ${request.studentClass}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  Text(
-                    request.classroomSection,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Divider(),
                   ),
-
                   if (isLeave) ...[
-                    // ─── Leave Pass Letter Style ───────────────────────────────
-                    _sectionTitle(context, '📋 Leave Permission Details'),
+                    _sectionTitle(context, 'Leave Permission Details'),
                     const SizedBox(height: 10),
                     _infoRow(
                       context,
                       'From Date',
                       request.fromDate != null
                           ? dateFormat.format(request.fromDate!)
-                          : '—',
+                          : '-',
                     ),
                     _infoRow(
                       context,
                       'To Date',
                       request.toDate != null
                           ? dateFormat.format(request.toDate!)
-                          : '—',
+                          : '-',
                     ),
-                    if (request.fromDate != null && request.toDate != null)
-                      _infoRow(
-                        context,
-                        'Duration',
-                        '${request.toDate!.difference(request.fromDate!).inDays + 1} day(s)',
-                      ),
                     _infoRow(
                       context,
                       'Destination',
-                      request.destination ?? '—',
+                      request.destination ?? '-',
                     ),
                     if ((request.parentContact ?? '').isNotEmpty)
                       _infoRow(
@@ -190,103 +171,78 @@ class ApprovedPassScreen extends StatelessWidget {
                         'Parent Contact',
                         request.parentContact!,
                       ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Text(
-                        'This is to certify that the above-mentioned student has been granted leave '
-                        'for the specified period. The student is permitted to leave the campus and '
-                        'return on the date mentioned above.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.orange.shade900,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
                   ] else ...[
-                    // ─── Outing Pass Details ───────────────────────────────────
-                    _sectionTitle(context, '🚪 Outing Pass Details'),
+                    _sectionTitle(context, 'Outing Pass Details'),
                     const SizedBox(height: 10),
-                    _infoRow(
-                      context,
-                      'Date',
-                      dateFormat.format(request.date),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _infoRow(
-                            context,
-                            'Out Time',
-                            request.outTime,
-                          ),
-                        ),
-                        Expanded(
-                          child: _infoRow(
-                            context,
-                            'In Time',
-                            request.inTime,
-                          ),
-                        ),
-                      ],
-                    ),
+                    _infoRow(context, 'Date', dateFormat.format(request.date)),
+                    _infoRow(context, 'Out Time', request.outTime),
+                    _infoRow(context, 'In Time', request.inTime),
                   ],
-
                   const SizedBox(height: 10),
                   _infoRow(context, 'Reason', request.reason),
-
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Divider(),
                   ),
-
-                  // Approval trail
-                  _sectionTitle(context, '✅ Approval Trail'),
+                  _sectionTitle(context, 'Approval Trail'),
                   const SizedBox(height: 10),
                   _approvalStep(
                     context,
-                    step: '1',
                     label: 'Class Incharge Approved',
-                    time: request.teacherActionAt != null
-                        ? DateFormat('dd MMM yyyy, hh:mm a')
-                            .format(request.teacherActionAt!)
-                        : null,
                     done: request.teacherActionAt != null,
+                    time: request.teacherActionAt == null
+                        ? null
+                        : DateFormat(
+                            'dd MMM yyyy, hh:mm a',
+                          ).format(request.teacherActionAt!),
                   ),
                   const SizedBox(height: 8),
                   _approvalStep(
                     context,
-                    step: '2',
                     label: 'HOD Final Approved',
-                    time: request.hodActionAt != null
-                        ? DateFormat('dd MMM yyyy, hh:mm a')
-                            .format(request.hodActionAt!)
-                        : null,
                     done: request.hodActionAt != null,
+                    time: request.hodActionAt == null
+                        ? null
+                        : DateFormat(
+                            'dd MMM yyyy, hh:mm a',
+                          ).format(request.hodActionAt!),
                   ),
-
+                  if (request.isUsed) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Divider(),
+                    ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F0),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE86A61)),
+                      ),
+                      child: Text(
+                        'Already used at ${DateFormat('dd MMM yyyy, hh:mm a').format(request.usedAt!)}',
+                        style: const TextStyle(
+                          color: Color(0xFFB3261E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 14),
                     child: Divider(),
                   ),
-
-                  // QR Code
-                  _sectionTitle(context, '📱 Gate Pass QR Code'),
+                  _sectionTitle(context, 'Security QR'),
                   const SizedBox(height: 6),
                   const Text(
-                    'Show this QR code to security for verification.',
+                    'This QR contains only the secure pass ID.',
                     style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 14),
                   Center(
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: BorderRadius.circular(12),
@@ -295,7 +251,7 @@ class ApprovedPassScreen extends StatelessWidget {
                       child: QrImageView(
                         data: request.qrData,
                         version: QrVersions.auto,
-                        size: 200,
+                        size: 210,
                       ),
                     ),
                   ),
@@ -305,31 +261,28 @@ class ApprovedPassScreen extends StatelessWidget {
                       'Pass ID: ${request.id}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.grey.shade500,
-                        fontSize: 10,
+                        fontSize: 11,
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-                  // Validity note for outing pass
-                  if (!isLeave)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '⚠️ This outing pass is valid only for '
-                        '${dateFormat.format(request.date)}. '
-                        'Using it on any other date will be rejected at the gate.',
-                        style: TextStyle(
-                          color: Colors.blue.shade900,
-                          fontSize: 12,
-                        ),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      isLeave
+                          ? 'Security will verify this pass in real time before allowing exit.'
+                          : 'This outing pass is valid only on ${dateFormat.format(request.date)}.',
+                      style: TextStyle(
+                        color: Colors.blue.shade900,
+                        fontSize: 12,
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -339,12 +292,76 @@ class ApprovedPassScreen extends StatelessWidget {
     );
   }
 
+  Widget _studentPhotoCard() {
+    final photoBytes = _photoBytes;
+    return Container(
+      width: 108,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5FBF7),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFCAE8D4)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 92,
+            height: 112,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: const Color(0xFFE7F5ED),
+              image: photoBytes == null
+                  ? null
+                  : DecorationImage(
+                      image: MemoryImage(photoBytes),
+                      fit: BoxFit.cover,
+                    ),
+            ),
+            child: photoBytes == null
+                ? const Icon(Icons.person, size: 44, color: Color(0xFF0F8F53))
+                : null,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Student Photo',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F8F53),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _typeChip(bool isLeave) {
+    final accent = isLeave ? Colors.orange : Colors.blue;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.shade300),
+      ),
+      child: Text(
+        request.passType,
+        style: TextStyle(
+          color: accent.shade800,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
   Widget _sectionTitle(BuildContext context, String title) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 
@@ -358,16 +375,13 @@ class ApprovedPassScreen extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ),
         ],
@@ -377,31 +391,19 @@ class ApprovedPassScreen extends StatelessWidget {
 
   Widget _approvalStep(
     BuildContext context, {
-    required String step,
     required String label,
     required bool done,
     String? time,
   }) {
     return Row(
       children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: done ? Colors.green.shade100 : Colors.grey.shade200,
-          ),
-          child: Center(
-            child: done
-                ? Icon(Icons.check, color: Colors.green.shade700, size: 16)
-                : Text(
-                    step,
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+        CircleAvatar(
+          radius: 14,
+          backgroundColor: done ? Colors.green.shade100 : Colors.grey.shade200,
+          child: Icon(
+            done ? Icons.check : Icons.schedule,
+            color: done ? Colors.green.shade700 : Colors.grey.shade600,
+            size: 16,
           ),
         ),
         const SizedBox(width: 10),
@@ -412,17 +414,14 @@ class ApprovedPassScreen extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: done ? Colors.green.shade800 : Colors.grey.shade600,
+                  fontWeight: FontWeight.w600,
+                  color: done ? Colors.green.shade800 : Colors.grey.shade700,
                 ),
               ),
               if (time != null)
                 Text(
                   time,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
             ],
           ),

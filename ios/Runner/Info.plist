@@ -59,7 +59,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Profile photo capture requires camera access.</string>
+	<string>Camera access is required for profile photos and live QR gate pass scanning.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Profile photo selection requires photo library access.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

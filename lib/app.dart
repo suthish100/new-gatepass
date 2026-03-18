@@ -31,6 +31,7 @@ class _GatePassAppState extends State<GatePassApp> {
   final ClassroomService _classroomService = ClassroomService();
   final DelegationService _delegationService = DelegationService();
   late final GatePassService _gatePassService = GatePassService(
+    classroomService: _classroomService,
     delegationService: _delegationService,
   );
 
@@ -335,7 +336,6 @@ class _GatePassAppState extends State<GatePassApp> {
     return WelcomeScreen(
       key: const ValueKey<String>('welcome'),
       onSelectRole: _onSelectRole,
-      gatePassService: _gatePassService,
     );
   }
 

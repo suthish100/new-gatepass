@@ -241,7 +241,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _selectedDepartment,
+            initialValue: _selectedDepartment,
             decoration: const InputDecoration(
               labelText: 'Department',
               prefixIcon: Icon(Icons.apartment_outlined),
@@ -262,7 +262,7 @@ class _AuthScreenState extends State<AuthScreen> {
           if (_yearRequired) ...<Widget>[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedYear,
+              initialValue: _selectedYear,
               decoration: const InputDecoration(
                 labelText: 'Class / Year',
                 prefixIcon: Icon(Icons.class_outlined),

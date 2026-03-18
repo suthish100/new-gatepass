@@ -2,18 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants.dart';
 import '../../services/firebase_bootstrap.dart';
-import '../../services/gate_pass_service.dart';
-import 'scan_pass_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({
-    super.key,
-    required this.onSelectRole,
-    required this.gatePassService,
-  });
+  const WelcomeScreen({super.key, required this.onSelectRole});
 
   final ValueChanged<String> onSelectRole;
-  final GatePassService gatePassService;
 
   @override
   Widget build(BuildContext context) {
@@ -97,32 +90,6 @@ class WelcomeScreen extends StatelessWidget {
                     _RoleButton(
                       label: 'HOD',
                       onPressed: () => onSelectRole(AppRoles.hod),
-                    ),
-                    const SizedBox(height: 28),
-                    const Divider(),
-                    const SizedBox(height: 12),
-                    // Security Gate access — no login required
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.qr_code_scanner),
-                        label: const Text('Security Gate Verification'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          shape: const StadiumBorder(),
-                          side: const BorderSide(color: Color(0xFF1B84F2)),
-                          foregroundColor: const Color(0xFF1B84F2),
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => ScanPassScreen(
-                                gatePassService: gatePassService,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
                     ),
                     const SizedBox(height: 24),
                   ],
