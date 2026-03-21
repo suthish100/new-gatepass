@@ -59,7 +59,7 @@ class RequestDetailScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 4),
-                  Text('Register No: ${request.registerNumber}'),
+                  Text('Room No: ${request.registerNumber}'),
                   Text('Class: ${request.classroomSection}'),
                   Text('Department: ${request.department}'),
                   const SizedBox(height: 8),
