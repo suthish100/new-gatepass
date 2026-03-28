@@ -536,7 +536,7 @@ class _ScanPassScreenState extends State<ScanPassScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                request.registerNumber,
+                'Room No: ${request.roomNumber}',
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
               Text(

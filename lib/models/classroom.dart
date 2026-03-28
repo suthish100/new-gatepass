@@ -19,6 +19,11 @@ class Classroom {
     this.hodDelegationReason,
     this.hodDelegationStartAt,
     this.hodDelegationEndAt,
+    this.teacherDelegatedSingleApproverId,
+    this.teacherDelegatedSingleApproverName,
+    this.teacherDelegationReason,
+    this.teacherDelegationStartAt,
+    this.teacherDelegationEndAt,
     required this.createdAt,
   });
 
@@ -39,6 +44,11 @@ class Classroom {
   final String? hodDelegationReason;
   final DateTime? hodDelegationStartAt;
   final DateTime? hodDelegationEndAt;
+  final String? teacherDelegatedSingleApproverId;
+  final String? teacherDelegatedSingleApproverName;
+  final String? teacherDelegationReason;
+  final DateTime? teacherDelegationStartAt;
+  final DateTime? teacherDelegationEndAt;
   final DateTime createdAt;
 
   bool get hasActiveHodDelegation {
@@ -49,6 +59,16 @@ class Classroom {
         hodDelegationEndAt != null &&
         !now.isBefore(hodDelegationStartAt!) &&
         !now.isAfter(hodDelegationEndAt!);
+  }
+
+  bool get hasActiveTeacherDelegation {
+    final now = DateTime.now();
+    return teacherDelegatedSingleApproverId != null &&
+        teacherDelegatedSingleApproverId!.isNotEmpty &&
+        teacherDelegationStartAt != null &&
+        teacherDelegationEndAt != null &&
+        !now.isBefore(teacherDelegationStartAt!) &&
+        !now.isAfter(teacherDelegationEndAt!);
   }
 
   Classroom copyWith({
@@ -69,6 +89,11 @@ class Classroom {
     String? hodDelegationReason,
     DateTime? hodDelegationStartAt,
     DateTime? hodDelegationEndAt,
+    String? teacherDelegatedSingleApproverId,
+    String? teacherDelegatedSingleApproverName,
+    String? teacherDelegationReason,
+    DateTime? teacherDelegationStartAt,
+    DateTime? teacherDelegationEndAt,
     DateTime? createdAt,
   }) {
     return Classroom(
@@ -91,6 +116,13 @@ class Classroom {
       hodDelegationReason: hodDelegationReason ?? this.hodDelegationReason,
       hodDelegationStartAt: hodDelegationStartAt ?? this.hodDelegationStartAt,
       hodDelegationEndAt: hodDelegationEndAt ?? this.hodDelegationEndAt,
+      teacherDelegatedSingleApproverId:
+          teacherDelegatedSingleApproverId ?? this.teacherDelegatedSingleApproverId,
+      teacherDelegatedSingleApproverName:
+          teacherDelegatedSingleApproverName ?? this.teacherDelegatedSingleApproverName,
+      teacherDelegationReason: teacherDelegationReason ?? this.teacherDelegationReason,
+      teacherDelegationStartAt: teacherDelegationStartAt ?? this.teacherDelegationStartAt,
+      teacherDelegationEndAt: teacherDelegationEndAt ?? this.teacherDelegationEndAt,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -117,6 +149,15 @@ class Classroom {
       'hodDelegationEndAt': hodDelegationEndAt == null
           ? null
           : Timestamp.fromDate(hodDelegationEndAt!),
+      'teacherDelegatedSingleApproverId': teacherDelegatedSingleApproverId,
+      'teacherDelegatedSingleApproverName': teacherDelegatedSingleApproverName,
+      'teacherDelegationReason': teacherDelegationReason,
+      'teacherDelegationStartAt': teacherDelegationStartAt == null
+          ? null
+          : Timestamp.fromDate(teacherDelegationStartAt!),
+      'teacherDelegationEndAt': teacherDelegationEndAt == null
+          ? null
+          : Timestamp.fromDate(teacherDelegationEndAt!),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -166,6 +207,17 @@ class Classroom {
       hodDelegationEndAt: hodDelegationEndAt is Timestamp
           ? hodDelegationEndAt.toDate()
           : hodDelegationEndAt as DateTime?,
+      teacherDelegatedSingleApproverId:
+          map['teacherDelegatedSingleApproverId'] as String?,
+      teacherDelegatedSingleApproverName:
+          map['teacherDelegatedSingleApproverName'] as String?,
+      teacherDelegationReason: map['teacherDelegationReason'] as String?,
+      teacherDelegationStartAt: map['teacherDelegationStartAt'] is Timestamp
+          ? (map['teacherDelegationStartAt'] as Timestamp).toDate()
+          : map['teacherDelegationStartAt'] as DateTime?,
+      teacherDelegationEndAt: map['teacherDelegationEndAt'] is Timestamp
+          ? (map['teacherDelegationEndAt'] as Timestamp).toDate()
+          : map['teacherDelegationEndAt'] as DateTime?,
       createdAt: createdAt,
     );
   }

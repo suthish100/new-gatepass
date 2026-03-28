@@ -8,10 +8,13 @@ class AppUser {
     this.year,
     this.hodType,
     this.registerNumber,
+    this.roomNumber,
+    this.gender,
     this.phoneNumber,
     this.parentPhoneNumber,
     this.profileImageBase64,
     this.themeMode,
+    this.orgId,
   });
 
   final String id;
@@ -22,10 +25,13 @@ class AppUser {
   final String? year;
   final String? hodType;
   final String? registerNumber;
+  final String? roomNumber;
+  final String? gender;
   final String? phoneNumber;
   final String? parentPhoneNumber;
   final String? profileImageBase64;
   final String? themeMode;
+  final String? orgId;
 
   AppUser copyWith({
     String? id,
@@ -36,10 +42,13 @@ class AppUser {
     String? year,
     String? hodType,
     String? registerNumber,
+    String? roomNumber,
+    String? gender,
     String? phoneNumber,
     String? parentPhoneNumber,
     String? profileImageBase64,
     String? themeMode,
+    String? orgId,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -50,10 +59,13 @@ class AppUser {
       year: year ?? this.year,
       hodType: hodType ?? this.hodType,
       registerNumber: registerNumber ?? this.registerNumber,
+      roomNumber: roomNumber ?? this.roomNumber,
+      gender: gender ?? this.gender,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       parentPhoneNumber: parentPhoneNumber ?? this.parentPhoneNumber,
       profileImageBase64: profileImageBase64 ?? this.profileImageBase64,
       themeMode: themeMode ?? this.themeMode,
+      orgId: orgId ?? this.orgId,
     );
   }
 
@@ -67,10 +79,13 @@ class AppUser {
       'year': year,
       'hodType': hodType,
       'registerNumber': registerNumber,
+      'roomNumber': roomNumber,
+      'gender': gender,
       'phoneNumber': phoneNumber,
       'parentPhoneNumber': parentPhoneNumber,
       'profileImageBase64': profileImageBase64,
       'themeMode': themeMode,
+      'orgId': orgId,
     };
   }
 
@@ -84,10 +99,14 @@ class AppUser {
       year: map['year'] as String?,
       hodType: map['hodType'] as String?,
       registerNumber: map['registerNumber'] as String?,
+      roomNumber:
+          map['roomNumber'] as String? ?? map['registerNumber'] as String?,
+      gender: map['gender'] as String?,
       phoneNumber: map['phoneNumber'] as String?,
       parentPhoneNumber: map['parentPhoneNumber'] as String?,
       profileImageBase64: map['profileImageBase64'] as String?,
       themeMode: map['themeMode'] as String?,
+      orgId: map['orgId'] as String?,
     );
   }
 }

@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../models/app_user.dart';
 import '../../services/auth_service.dart';
-import 'change_theme_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -109,28 +108,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     widget.onUserUpdated(updated);
   }
 
-  Future<void> _openThemeScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChangeThemeScreen(
-          isDarkMode: widget.isDarkMode,
-          onThemeChanged: (isDark) async {
-            widget.onThemeChanged(isDark);
-            final updated = await widget.authService.updateProfile(
-              user: _user,
-              themeMode: isDark ? 'dark' : 'light',
-            );
-            if (!mounted) {
-              return;
-            }
-            setState(() => _user = updated);
-            widget.onUserUpdated(updated);
-          },
-        ),
-      ),
-    );
-  }
-
   Future<void> _logout() async {
     await widget.onLogout();
     if (!mounted) {
@@ -186,13 +163,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 20),
           _profileRow('name', _user.name),
           _profileRow('Department', _user.department),
+          if (showParentPhone) _profileRow('Room no', _user.roomNumber ?? '-'),
+          if (showParentPhone) _profileRow('Gender', _user.gender ?? '-'),
           _profileRow('phone no', _user.phoneNumber ?? '-'),
           if (showParentPhone)
             _profileRow('parents phone no', _user.parentPhoneNumber ?? '-'),
           const SizedBox(height: 20),
           _menuButton(label: 'Edit profile', onPressed: _openEditProfile),
-          const SizedBox(height: 10),
-          _menuButton(label: 'Theme', onPressed: _openThemeScreen),
           const SizedBox(height: 10),
           _menuButton(label: 'Log-out', onPressed: _logout),
         ],
@@ -248,10 +225,18 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  static const List<String> _studentGenders = <String>[
+    'Male',
+    'Female',
+    'Other',
+  ];
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _parentPhoneController;
+  late final TextEditingController _roomNumberController;
+  String? _gender;
   bool _saving = false;
 
   @override
@@ -264,6 +249,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _parentPhoneController = TextEditingController(
       text: widget.user.parentPhoneNumber ?? '',
     );
+    _roomNumberController = TextEditingController(
+      text: widget.user.roomNumber ?? '',
+    );
+    _gender = widget.user.gender;
   }
 
   @override
@@ -271,6 +260,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _parentPhoneController.dispose();
+    _roomNumberController.dispose();
     super.dispose();
   }
 
@@ -284,6 +274,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final updated = await widget.authService.updateProfile(
         user: widget.user,
         name: _nameController.text,
+        gender: showParentPhone ? _gender : widget.user.gender,
+        roomNumber: showParentPhone ? _roomNumberController.text : widget.user.roomNumber,
         phoneNumber: _phoneController.text,
         parentPhoneNumber: showParentPhone
             ? _parentPhoneController.text
@@ -333,6 +325,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               readOnly: true,
               decoration: const InputDecoration(labelText: 'Department'),
             ),
+            if (showParentPhone) ...<Widget>[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _roomNumberController,
+                decoration: const InputDecoration(labelText: 'Room Number'),
+                validator: (value) {
+                  if ((value ?? '').trim().isEmpty) {
+                    return 'Room number is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _gender,
+                decoration: const InputDecoration(labelText: 'Gender'),
+                items: _studentGenders.map((gender) {
+                  return DropdownMenuItem<String>(
+                    value: gender,
+                    child: Text(gender),
+                  );
+                }).toList(),
+                validator: (value) {
+                  if ((value ?? '').trim().isEmpty) {
+                    return 'Gender is required';
+                  }
+                  return null;
+                },
+                onChanged: (value) {
+                  setState(() => _gender = value);
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             TextFormField(
               controller: _phoneController,

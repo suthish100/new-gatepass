@@ -10,6 +10,7 @@ import 'services/auth_service.dart';
 import 'services/classroom_service.dart';
 import 'services/delegation_service.dart';
 import 'services/gate_pass_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 import 'ui/screens/hod_dashboard.dart';
 import 'ui/screens/join_class_screen.dart';
@@ -30,6 +31,7 @@ class _GatePassAppState extends State<GatePassApp> {
   final AuthService _authService = AuthService();
   final ClassroomService _classroomService = ClassroomService();
   final DelegationService _delegationService = DelegationService();
+  final NotificationService _notificationService = NotificationService();
   late final GatePassService _gatePassService = GatePassService(
     classroomService: _classroomService,
     delegationService: _delegationService,
@@ -43,6 +45,7 @@ class _GatePassAppState extends State<GatePassApp> {
   String? _pendingJoinCode;
   String? _prefillYearOrSection;
   bool _authStartInRegisterMode = false;
+  bool _isInitializing = true;
   int _dashboardVersion = 0;
   bool _joinFlowOpen = false;
   bool _joinFlowScheduled = false;
@@ -52,6 +55,7 @@ class _GatePassAppState extends State<GatePassApp> {
   void initState() {
     super.initState();
     _initDeepLinks();
+    unawaited(_restoreSession());
   }
 
   @override
@@ -211,9 +215,34 @@ class _GatePassAppState extends State<GatePassApp> {
     setState(() => _isDarkMode = isDarkMode);
   }
 
+  Future<void> _restoreSession() async {
+    try {
+      final user = await _authService.restoreSession();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _currentUser = user;
+        _isDarkMode = user?.themeMode == 'dark';
+        _isInitializing = false;
+      });
+      _scheduleJoinScreenFromLink();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isInitializing = false);
+    }
+  }
+
   Future<void> _logout() async {
     await _authService.logout();
-    setState(() => _currentUser = null);
+    setState(() {
+      _currentUser = null;
+      _selectedRole = null;
+      _prefillYearOrSection = null;
+      _authStartInRegisterMode = false;
+    });
   }
 
   void _scheduleJoinScreenFromLink() {
@@ -313,6 +342,11 @@ class _GatePassAppState extends State<GatePassApp> {
   }
 
   Widget _buildCurrentPage() {
+    if (_isInitializing) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     if (_currentUser != null) {
       return _buildDashboard(_currentUser!);
     }
@@ -349,6 +383,7 @@ class _GatePassAppState extends State<GatePassApp> {
           authService: _authService,
           delegationService: _delegationService,
           gatePassService: _gatePassService,
+          notificationService: _notificationService,
           onLogout: _logout,
           isDarkMode: _isDarkMode,
           onThemeChanged: _onThemeChanged,
@@ -360,7 +395,9 @@ class _GatePassAppState extends State<GatePassApp> {
           user: user,
           authService: _authService,
           classroomService: _classroomService,
+          delegationService: _delegationService,
           gatePassService: _gatePassService,
+          notificationService: _notificationService,
           onLogout: _logout,
           isDarkMode: _isDarkMode,
           onThemeChanged: _onThemeChanged,

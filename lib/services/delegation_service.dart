@@ -154,6 +154,129 @@ class DelegationService {
         )
         .toList();
   }
+
+  Future<TeacherDelegation> createTeacherSelfDelegation({
+    required String teacherId,
+    required String teacherName,
+    required String classroomId,
+    required String classroomSection,
+    required String hodId,
+    required String delegateTeacherId,
+    required String delegateTeacherName,
+    required String reason,
+    required DateTime startAt,
+    required DateTime endAt,
+  }) async {
+    if (teacherId.trim().isEmpty || delegateTeacherId.trim().isEmpty) {
+      throw DelegationException('Invalid teacher id.');
+    }
+    if (teacherId == delegateTeacherId) {
+      throw DelegationException(
+        'Owner and delegate cannot be the same teacher.',
+      );
+    }
+    if (!endAt.isAfter(startAt)) {
+      throw DelegationException(
+        'Delegation end time must be after start time.',
+      );
+    }
+    if (classroomId.trim().isEmpty) {
+      throw DelegationException('Classroom id is required for delegation.');
+    }
+
+    final now = DateTime.now();
+    final delegation = TeacherDelegation(
+      id: buildDelegationId(
+        ownerTeacherId: teacherId,
+        delegateTeacherId: delegateTeacherId,
+        classroomId: classroomId,
+      ),
+      ownerTeacherId: teacherId,
+      ownerTeacherName: teacherName,
+      delegateTeacherId: delegateTeacherId,
+      delegateTeacherName: delegateTeacherName,
+      classroomId: classroomId,
+      classroomSection: classroomSection,
+      hodId: hodId,
+      reason: reason.trim().isEmpty
+          ? 'Self-delegation by teacher'
+          : reason.trim(),
+      startAt: startAt,
+      endAt: endAt,
+      isActive: true,
+      createdAt: now,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore
+          .collection('teacher_delegations')
+          .doc(delegation.id)
+          .set(delegation.toMap());
+      return delegation;
+    }
+
+    _localDelegations.removeWhere((item) => item.id == delegation.id);
+    _localDelegations.insert(0, delegation);
+    return delegation;
+  }
+  Future<TeacherDelegation?> findActiveDelegationForClassroom({
+    required String ownerTeacherId,
+    required String classroomId,
+    DateTime? at,
+  }) async {
+    final now = at ?? DateTime.now();
+    final source = FirebaseBootstrap.isReady
+        ? (await _firestore
+                .collection('teacher_delegations')
+                .where('ownerTeacherId', isEqualTo: ownerTeacherId)
+                .get())
+            .docs
+            .map((doc) => TeacherDelegation.fromMap(doc.data(), doc.id))
+            .toList()
+        : _localDelegations;
+
+    final matches = source
+        .where((item) => item.ownerTeacherId == ownerTeacherId)
+        .where((item) => item.classroomId == classroomId)
+        .where((item) => item.isActive)
+        .where((item) => !now.isBefore(item.startAt) && !now.isAfter(item.endAt))
+        .toList();
+    if (matches.isEmpty) {
+      return null;
+    }
+    matches.sort((a, b) => b.startAt.compareTo(a.startAt));
+    return matches.first;
+  }
+
+  Future<void> revokeDelegation({required TeacherDelegation delegation}) async {
+    if (FirebaseBootstrap.isReady) {
+      await _firestore.collection('teacher_delegations').doc(delegation.id).update(
+        <String, dynamic>{'isActive': false},
+      );
+      return;
+    }
+
+    final index = _localDelegations.indexWhere((item) => item.id == delegation.id);
+    if (index >= 0) {
+      final current = _localDelegations[index];
+      _localDelegations[index] = TeacherDelegation(
+        id: current.id,
+        ownerTeacherId: current.ownerTeacherId,
+        ownerTeacherName: current.ownerTeacherName,
+        delegateTeacherId: current.delegateTeacherId,
+        delegateTeacherName: current.delegateTeacherName,
+        classroomId: current.classroomId,
+        classroomSection: current.classroomSection,
+        hodId: current.hodId,
+        reason: current.reason,
+        startAt: current.startAt,
+        endAt: current.endAt,
+        isActive: false,
+        createdAt: current.createdAt,
+      );
+    }
+  }
+
 }
 
 class DelegationException implements Exception {

@@ -8,7 +8,8 @@ class GatePassRequest {
     required this.studentId,
     required this.studentName,
     this.studentPhotoBase64,
-    required this.registerNumber,
+    this.studentGender,
+    required this.roomNumber,
     required this.studentClass,
     required this.department,
     required this.classroomId,
@@ -22,6 +23,7 @@ class GatePassRequest {
     required this.reason,
     required this.status,
     required this.createdAt,
+    this.orgId,
     this.teacherActionAt,
     this.hodActionAt,
     this.approvedAt,
@@ -46,7 +48,8 @@ class GatePassRequest {
   final String studentId;
   final String studentName;
   final String? studentPhotoBase64;
-  final String registerNumber;
+  final String? studentGender;
+  final String roomNumber;
   final String studentClass;
   final String department;
   final String classroomId;
@@ -60,6 +63,7 @@ class GatePassRequest {
   final String reason;
   final String status;
   final DateTime createdAt;
+  final String? orgId;
   final DateTime? teacherActionAt;
   final DateTime? hodActionAt;
   final DateTime? approvedAt;
@@ -111,7 +115,8 @@ class GatePassRequest {
     String? studentId,
     String? studentName,
     String? studentPhotoBase64,
-    String? registerNumber,
+    String? studentGender,
+    String? roomNumber,
     String? studentClass,
     String? department,
     String? classroomId,
@@ -125,6 +130,7 @@ class GatePassRequest {
     String? reason,
     String? status,
     DateTime? createdAt,
+    String? orgId,
     DateTime? teacherActionAt,
     DateTime? hodActionAt,
     DateTime? approvedAt,
@@ -149,7 +155,8 @@ class GatePassRequest {
       studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
       studentPhotoBase64: studentPhotoBase64 ?? this.studentPhotoBase64,
-      registerNumber: registerNumber ?? this.registerNumber,
+      studentGender: studentGender ?? this.studentGender,
+      roomNumber: roomNumber ?? this.roomNumber,
       studentClass: studentClass ?? this.studentClass,
       department: department ?? this.department,
       classroomId: classroomId ?? this.classroomId,
@@ -163,6 +170,7 @@ class GatePassRequest {
       reason: reason ?? this.reason,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      orgId: orgId ?? this.orgId,
       teacherActionAt: teacherActionAt ?? this.teacherActionAt,
       hodActionAt: hodActionAt ?? this.hodActionAt,
       approvedAt: approvedAt ?? this.approvedAt,
@@ -193,7 +201,9 @@ class GatePassRequest {
       'studentId': studentId,
       'studentName': studentName,
       'studentPhotoBase64': studentPhotoBase64,
-      'registerNumber': registerNumber,
+      'studentGender': studentGender,
+      'roomNumber': roomNumber,
+      'registerNumber': roomNumber,
       'studentClass': studentClass,
       'department': department,
       'classroomId': classroomId,
@@ -207,6 +217,7 @@ class GatePassRequest {
       'reason': reason,
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
+      'orgId': orgId,
       'teacherActionAt': teacherActionAt == null
           ? null
           : Timestamp.fromDate(teacherActionAt!),
@@ -238,7 +249,9 @@ class GatePassRequest {
       'studentId': studentId,
       'studentName': studentName,
       'studentPhotoBase64': studentPhotoBase64,
-      'registerNumber': registerNumber,
+      'studentGender': studentGender,
+      'roomNumber': roomNumber,
+      'registerNumber': roomNumber,
       'studentClass': studentClass,
       'department': department,
       'classroomId': classroomId,
@@ -252,6 +265,7 @@ class GatePassRequest {
       'reason': reason,
       'status': status,
       'createdAt': createdAt.toIso8601String(),
+      'orgId': orgId,
       'teacherActionAt': teacherActionAt?.toIso8601String(),
       'hodActionAt': hodActionAt?.toIso8601String(),
       'approvedAt': approvedAt?.toIso8601String(),
@@ -301,7 +315,9 @@ class GatePassRequest {
       studentName:
           map['studentName'] as String? ?? map['name'] as String? ?? '',
       studentPhotoBase64: map['studentPhotoBase64'] as String?,
-      registerNumber: map['registerNumber'] as String? ?? '',
+      studentGender: map['studentGender'] as String?,
+      roomNumber:
+          map['roomNumber'] as String? ?? map['registerNumber'] as String? ?? '',
       studentClass: map['studentClass'] as String? ?? '',
       department: map['department'] as String? ?? '',
       classroomId: map['classroomId'] as String? ?? '',
@@ -315,6 +331,7 @@ class GatePassRequest {
       reason: map['reason'] as String? ?? '',
       status: status,
       createdAt: parseDate(map['createdAt']),
+      orgId: map['orgId'] as String?,
       teacherActionAt: parseOptionalDate(map['teacherActionAt']),
       hodActionAt: parseOptionalDate(map['hodActionAt']),
       approvedAt: parseOptionalDate(map['approvedAt']),

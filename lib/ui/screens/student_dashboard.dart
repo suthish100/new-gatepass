@@ -16,6 +16,7 @@ import 'create_pass_screen.dart';
 import 'join_class_screen.dart';
 import 'profile_screen.dart';
 import 'request_detail_screen.dart';
+import 'settings_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({
@@ -87,6 +88,29 @@ class _StudentDashboardState extends State<StudentDashboard> {
         student: widget.user,
         code: code,
       );
+
+      // Propagate orgId from teacher first, then from HOD as fallback.
+      String? linkedOrgId;
+      if (room.teacherId.isNotEmpty) {
+        final teacher = await widget.authService.getUserById(room.teacherId);
+        if (teacher != null && teacher.orgId != null) {
+          linkedOrgId = teacher.orgId;
+        }
+      }
+      if ((linkedOrgId == null || linkedOrgId.isEmpty) && room.hodId.isNotEmpty) {
+        final hod = await widget.authService.getUserById(room.hodId);
+        if (hod != null && hod.orgId != null) {
+          linkedOrgId = hod.orgId;
+        }
+      }
+      if (linkedOrgId != null && linkedOrgId.isNotEmpty && widget.user.orgId != linkedOrgId) {
+        await widget.authService.updateProfile(
+          user: widget.user,
+          orgId: linkedOrgId,
+        );
+        widget.onUserUpdated(widget.user.copyWith(orgId: linkedOrgId));
+      }
+
       await _loadData();
       if (!mounted) return true;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -165,13 +189,14 @@ class _StudentDashboardState extends State<StudentDashboard> {
       drawer: DashboardDrawer(
         user: widget.user,
         title: 'Student Dashboard',
-        onRefresh: _loadData,
         onProfile: _openProfile,
+        onLogout: widget.onLogout,
+        onSettings: _openSettings,
         footerNote: hasClass
             ? 'Joined classes: ${_joinedClassrooms.length}'
             : 'Join a class to start requesting passes.',
       ),
-      appBar: AppBar(title: const Text('Student Dashboard')),
+      appBar: AppBar(title: _dashboardTitle('Student Dashboard')),
       body: SafeArea(
         child: Row(
           children: <Widget>[
@@ -193,6 +218,19 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   padding: const EdgeInsets.fromLTRB(12, 10, 16, 16),
                   children: <Widget>[
                     _welcomeCard(),
+                    if (widget.user.orgId != null) ...[
+                      Card(
+                        color: Colors.green.shade50,
+                        child: ListTile(
+                          leading: const Icon(Icons.verified_user, color: Colors.green),
+                          title: const Text('Connected Organization'),
+                          subtitle: Text(
+                            'You are connected with ${colleges[widget.user.orgId] ?? widget.user.orgId}.',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     const SizedBox(height: 12),
 
                     // Active pass banner
@@ -281,6 +319,18 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
+  Widget _dashboardTitle(String text) {
+    final isCompact = MediaQuery.of(context).size.width < 400;
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(
+        context,
+      ).appBarTheme.titleTextStyle?.copyWith(fontSize: isCompact ? 21 : 24),
+    );
+  }
+
   Widget _activeBanner(GatePassRequest request) {
     Color bgColor;
     String message;
@@ -325,6 +375,20 @@ class _StudentDashboardState extends State<StudentDashboard> {
           onUserUpdated: widget.onUserUpdated,
           onThemeChanged: widget.onThemeChanged,
           onLogout: () async => widget.onLogout(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(
+          isDarkMode: widget.isDarkMode,
+          onThemeChanged: widget.onThemeChanged,
+          onLogout: () async {
+            widget.onLogout();
+          },
         ),
       ),
     );

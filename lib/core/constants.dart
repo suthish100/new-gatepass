@@ -78,3 +78,11 @@ String hodTypeDisplayName(String? hodType) {
   }
   return HodType.senior;
 }
+
+const Map<String, String> colleges = <String, String>{
+  'MEPCO2024': 'Mepco Schlenk Engineering College',
+  'TCE2024':   'Thiagarajar College of Engineering',
+  'ACEE2024':  'Arunachala College of Engineering',
+  'RVCE2024':  'Renganayagi Varatharaj College of Engineering',
+  // add more as needed
+};

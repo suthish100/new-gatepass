@@ -34,7 +34,7 @@ class GatePassService {
   Future<GatePassRequest> createRequest({
     required AppUser student,
     required Classroom classroom,
-    required String registerNumber,
+    required String roomNumber,
     required String passType,
     required DateTime date,
     required String outTime,
@@ -59,12 +59,16 @@ class GatePassService {
     // Flaw 4 fix: Check for existing active pass to prevent duplicate submissions
     await _ensureNoActivePass(studentId: student.id);
 
+    final teacherSingleApproverActive = classroom.hasActiveTeacherDelegation &&
+        classroom.teacherDelegatedSingleApproverId == classroom.hodId;
+
     final request = GatePassRequest(
       id: '',
       studentId: student.id,
       studentName: student.name,
       studentPhotoBase64: student.profileImageBase64,
-      registerNumber: registerNumber.trim(),
+      studentGender: student.gender,
+      roomNumber: roomNumber.trim(),
       studentClass: classroom.year,
       department: student.department,
       classroomId: classroom.id,
@@ -76,8 +80,11 @@ class GatePassService {
       outTime: outTime.trim(),
       inTime: inTime.trim(),
       reason: reason.trim(),
-      status: RequestStatus.pendingTeacher,
+      status: teacherSingleApproverActive
+          ? RequestStatus.forwardedToHod
+          : RequestStatus.pendingTeacher,
       createdAt: DateTime.now(),
+      orgId: student.orgId,
       fromDate: fromDate,
       toDate: toDate,
       destination: destination?.trim(),
@@ -785,7 +792,7 @@ class GatePassService {
       pendingSync: pendingSync,
       studentId: request?.studentId,
       studentName: request?.studentName,
-      registerNumber: request?.registerNumber,
+      roomNumber: request?.roomNumber,
       passType: request?.passType,
     );
 

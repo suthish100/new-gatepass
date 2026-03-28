@@ -12,7 +12,7 @@ class GatePassScanLog {
     required this.pendingSync,
     this.studentId,
     this.studentName,
-    this.registerNumber,
+    this.roomNumber,
     this.passType,
   });
 
@@ -26,7 +26,7 @@ class GatePassScanLog {
   final bool pendingSync;
   final String? studentId;
   final String? studentName;
-  final String? registerNumber;
+  final String? roomNumber;
   final String? passType;
 
   GatePassScanLog copyWith({
@@ -40,7 +40,7 @@ class GatePassScanLog {
     bool? pendingSync,
     String? studentId,
     String? studentName,
-    String? registerNumber,
+    String? roomNumber,
     String? passType,
   }) {
     return GatePassScanLog(
@@ -54,7 +54,7 @@ class GatePassScanLog {
       pendingSync: pendingSync ?? this.pendingSync,
       studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
-      registerNumber: registerNumber ?? this.registerNumber,
+      roomNumber: roomNumber ?? this.roomNumber,
       passType: passType ?? this.passType,
     );
   }
@@ -70,7 +70,8 @@ class GatePassScanLog {
       'pendingSync': pendingSync,
       'studentId': studentId,
       'studentName': studentName,
-      'registerNumber': registerNumber,
+      'roomNumber': roomNumber,
+      'registerNumber': roomNumber,
       'passType': passType,
     };
   }
@@ -87,7 +88,8 @@ class GatePassScanLog {
       'pendingSync': pendingSync,
       'studentId': studentId,
       'studentName': studentName,
-      'registerNumber': registerNumber,
+      'roomNumber': roomNumber,
+      'registerNumber': roomNumber,
       'passType': passType,
     };
   }
@@ -106,7 +108,8 @@ class GatePassScanLog {
       pendingSync: json['pendingSync'] as bool? ?? false,
       studentId: json['studentId'] as String?,
       studentName: json['studentName'] as String?,
-      registerNumber: json['registerNumber'] as String?,
+      roomNumber:
+          json['roomNumber'] as String? ?? json['registerNumber'] as String?,
       passType: json['passType'] as String?,
     );
   }

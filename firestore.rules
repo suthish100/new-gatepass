@@ -108,6 +108,10 @@ service cloud.firestore {
       allow update: if
         (isHod() && resource.data.hodId == request.auth.uid) ||
         (
+          isTeacher() &&
+          resource.data.teacherId == request.auth.uid
+        ) ||
+        (
           isSignedIn() &&
           (resource.data.teacherId == '' || resource.data.teacherId == request.auth.uid) &&
           request.resource.data.teacherId == request.auth.uid &&
@@ -128,9 +132,15 @@ service cloud.firestore {
 
     match /teacher_delegations/{delegationId} {
       allow read: if isSignedIn();
-      allow create: if isHod() && request.resource.data.hodId == request.auth.uid;
-      allow update: if isHod() && resource.data.hodId == request.auth.uid;
-      allow delete: if isHod() && resource.data.hodId == request.auth.uid;
+      allow create: if
+        (isHod() && request.resource.data.hodId == request.auth.uid) ||
+        (isTeacher() && request.resource.data.ownerTeacherId == request.auth.uid);
+      allow update: if
+        (isHod() && resource.data.hodId == request.auth.uid) ||
+        (isTeacher() && resource.data.ownerTeacherId == request.auth.uid);
+      allow delete: if
+        (isHod() && resource.data.hodId == request.auth.uid) ||
+        (isTeacher() && resource.data.ownerTeacherId == request.auth.uid);
     }
 
     match /gate_pass_requests/{requestId} {
@@ -158,6 +168,13 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create: if isValidScanHistoryCreate();
       allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && resource.data.toUserId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.fromUserId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.toUserId == request.auth.uid;
+      allow delete: if false;
     }
   }
 }

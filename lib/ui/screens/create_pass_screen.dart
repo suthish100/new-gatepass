@@ -35,7 +35,6 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
 
   // Common fields
   final _reasonController = TextEditingController();
-  final _registerController = TextEditingController();
 
   // Outing pass fields
   DateTime _outingDate = DateTime.now();
@@ -53,7 +52,6 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
     super.initState();
     _selectedClassroom = widget.classrooms.first;
     _selectedPassType = widget.initialPassType ?? PassType.outing;
-    _registerController.text = widget.student.registerNumber ?? '';
     final now = TimeOfDay.now();
     _outTime = _formatTime(now);
     _inTime = _formatTime(TimeOfDay(
@@ -65,7 +63,6 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
   @override
   void dispose() {
     _reasonController.dispose();
-    _registerController.dispose();
     _destinationController.dispose();
     _parentContactController.dispose();
     super.dispose();
@@ -129,6 +126,12 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final roomNumber = widget.student.roomNumber?.trim() ?? '';
+    if (roomNumber.isEmpty) {
+      _showError('Add your room number in Profile before creating a pass.');
+      return;
+    }
+
     // Extra validation for leave pass
     if (_selectedPassType == PassType.leave) {
       if (_destinationController.text.trim().isEmpty) {
@@ -142,7 +145,7 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
       await widget.gatePassService.createRequest(
         student: widget.student,
         classroom: _selectedClassroom,
-        registerNumber: _registerController.text,
+        roomNumber: roomNumber,
         passType: _selectedPassType,
         date: _selectedPassType == PassType.leave ? _fromDate : _outingDate,
         outTime: _selectedPassType == PassType.leave ? '' : _outTime,
@@ -237,16 +240,14 @@ class _CreatePassScreenState extends State<CreatePassScreen> {
 
               const SizedBox(height: 16),
 
-              // Register number
               TextFormField(
-                controller: _registerController,
+                initialValue: widget.student.roomNumber ?? '',
+                readOnly: true,
                 decoration: const InputDecoration(
-                  labelText: 'Register Number *',
+                  labelText: 'Room Number',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.badge_outlined),
+                  prefixIcon: Icon(Icons.meeting_room_outlined),
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
 
               const SizedBox(height: 20),

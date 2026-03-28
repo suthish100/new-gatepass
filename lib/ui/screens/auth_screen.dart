@@ -22,6 +22,12 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
+  static const List<String> _studentGenders = <String>[
+    'Male',
+    'Female',
+    'Other',
+  ];
+
   final _loginFormKey = GlobalKey<FormState>();
   final _registerFormKey = GlobalKey<FormState>();
 
@@ -36,12 +42,15 @@ class _AuthScreenState extends State<AuthScreen> {
       TextEditingController();
   final TextEditingController _registerConfirmPasswordController =
       TextEditingController();
+  final TextEditingController _registerRoomNumberController =
+      TextEditingController();
 
   bool _isLogin = true;
   bool _submitting = false;
   String _selectedRole = AppRoles.student;
   String _selectedDepartment = departments.first;
   String _selectedYear = classYears.first;
+  String? _selectedGender;
 
   @override
   void dispose() {
@@ -51,6 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _registerEmailController.dispose();
     _registerPasswordController.dispose();
     _registerConfirmPasswordController.dispose();
+    _registerRoomNumberController.dispose();
     super.dispose();
   }
 
@@ -96,6 +106,10 @@ class _AuthScreenState extends State<AuthScreen> {
         role: _selectedRole,
         department: _selectedDepartment,
         year: _yearRequired ? _selectedYear : null,
+        gender: _selectedRole == AppRoles.student ? _selectedGender : null,
+        roomNumber: _selectedRole == AppRoles.student
+            ? _registerRoomNumberController.text
+            : null,
         password: _registerPasswordController.text,
       );
       widget.onAuthenticated(user);
@@ -278,6 +292,40 @@ class _AuthScreenState extends State<AuthScreen> {
               },
             ),
           ],
+          if (_selectedRole == AppRoles.student) ...<Widget>[
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _registerRoomNumberController,
+              decoration: const InputDecoration(
+                labelText: 'Room Number',
+                prefixIcon: Icon(Icons.meeting_room_outlined),
+              ),
+              validator: _requiredValidator,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedGender,
+              decoration: const InputDecoration(
+                labelText: 'Gender',
+                prefixIcon: Icon(Icons.wc_outlined),
+              ),
+              items: _studentGenders.map((gender) {
+                return DropdownMenuItem<String>(
+                  value: gender,
+                  child: Text(gender),
+                );
+              }).toList(),
+              validator: (value) {
+                if ((value ?? '').trim().isEmpty) {
+                  return 'Gender is required';
+                }
+                return null;
+              },
+              onChanged: (value) {
+                setState(() => _selectedGender = value);
+              },
+            ),
+          ],
           const SizedBox(height: 12),
           TextFormField(
             controller: _registerPasswordController,
@@ -331,7 +379,7 @@ class _AuthScreenState extends State<AuthScreen> {
       case AppRoles.staff:
         return 'Staff registration: Name, Email, Role, Department, Year, Password, Confirm Password';
       default:
-        return 'Student registration: Name, Email, Role, Department, Year, Password, Confirm Password';
+        return 'Student registration: Name, Email, Role, Department, Year, Room Number, Gender, Password, Confirm Password';
     }
   }
 }

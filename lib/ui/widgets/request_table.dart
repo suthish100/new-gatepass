@@ -39,7 +39,7 @@ class RequestTable extends StatelessWidget {
         dataTextStyle: const TextStyle(color: Colors.white),
         columns: const <DataColumn>[
           DataColumn(label: Text('Name')),
-          DataColumn(label: Text('Reg No')),
+          DataColumn(label: Text('Room No')),
           DataColumn(label: Text('Class')),
           DataColumn(label: Text('Date')),
           DataColumn(label: Text('Out Time')),
@@ -58,7 +58,7 @@ class RequestTable extends StatelessWidget {
                   ),
                 ),
               ),
-              DataCell(Text(request.registerNumber)),
+              DataCell(Text(request.roomNumber)),
               DataCell(Text(request.studentClass)),
               DataCell(Text(DateFormat('dd MMM').format(request.date))),
               DataCell(Text(request.outTime)),

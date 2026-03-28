@@ -443,6 +443,168 @@ class ClassroomService {
     return updated;
   }
 
+  Future<Classroom> setHodAsSingleApprover({
+    required AppUser hod,
+    required Classroom classroom,
+    required int durationDays,
+    required String reason,
+  }) async {
+    if (hod.role != AppRoles.hod) {
+      throw ClassroomException('Only HOD can set single approver mode.');
+    }
+    if (classroom.hodId != hod.id) {
+      throw ClassroomException(
+        'This class is not assigned to your HOD account.',
+      );
+    }
+    if (classroom.teacherId.isEmpty) {
+      throw ClassroomException(
+        'Assign class incharge before enabling single approver mode.',
+      );
+    }
+    if (classroom.hasActiveHodDelegation) {
+      throw ClassroomException(
+        'Single approver is already active for ${classroom.hodDelegatedFinalApproverName ?? 'this class'} until ${classroom.hodDelegationEndAt}.',
+      );
+    }
+    if (classroom.hasActiveTeacherDelegation) {
+      throw ClassroomException(
+        'Class incharge already set HOD as single approver until ${classroom.teacherDelegationEndAt}.',
+      );
+    }
+    if (durationDays < 1) {
+      throw ClassroomException('Single approver duration must be at least 1 day.');
+    }
+
+    final startAt = DateTime.now();
+    final endAt = startAt.add(Duration(days: durationDays));
+    final updated = classroom.copyWith(
+      hodDelegatedFinalApproverId: classroom.teacherId,
+      hodDelegatedFinalApproverName: classroom.teacherName,
+      hodDelegationReason: reason.trim().isEmpty
+          ? 'HOD single approver mode'
+          : reason.trim(),
+      hodDelegationStartAt: startAt,
+      hodDelegationEndAt: endAt,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore
+          .collection('classrooms')
+          .doc(classroom.id)
+          .update(updated.toMap());
+      return updated;
+    }
+
+    final index = _localClassrooms.indexWhere(
+      (room) => room.id == classroom.id,
+    );
+    if (index >= 0) {
+      _localClassrooms[index] = updated;
+    }
+    return updated;
+  }
+
+  Future<Classroom> setTeacherSingleApproverToHod({
+    required AppUser teacher,
+    required Classroom classroom,
+    required int durationDays,
+    required String reason,
+    required String hodName,
+  }) async {
+    if (teacher.role != AppRoles.teacher) {
+      throw ClassroomException('Only class incharge can set HOD single approver mode.');
+    }
+    if (classroom.teacherId != teacher.id) {
+      throw ClassroomException('This class is not assigned to your account.');
+    }
+    if (classroom.hodId.isEmpty) {
+      throw ClassroomException('HOD is not mapped for this class.');
+    }
+    if (classroom.hasActiveTeacherDelegation) {
+      throw ClassroomException(
+        'HOD single approver is already active until ${classroom.teacherDelegationEndAt}.',
+      );
+    }
+    if (classroom.hasActiveHodDelegation) {
+      throw ClassroomException(
+        'HOD already enabled teacher single approver until ${classroom.hodDelegationEndAt}.',
+      );
+    }
+    if (durationDays < 1) {
+      throw ClassroomException('Single approver duration must be at least 1 day.');
+    }
+
+    final startAt = DateTime.now();
+    final endAt = startAt.add(Duration(days: durationDays));
+    final updated = classroom.copyWith(
+      teacherDelegatedSingleApproverId: classroom.hodId,
+      teacherDelegatedSingleApproverName: hodName,
+      teacherDelegationReason: reason.trim().isEmpty
+          ? 'Teacher single approver routed to HOD'
+          : reason.trim(),
+      teacherDelegationStartAt: startAt,
+      teacherDelegationEndAt: endAt,
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore
+          .collection('classrooms')
+          .doc(classroom.id)
+          .update(updated.toMap());
+      return updated;
+    }
+
+    final index = _localClassrooms.indexWhere((room) => room.id == classroom.id);
+    if (index >= 0) {
+      _localClassrooms[index] = updated;
+    }
+    return updated;
+  }
+
+  Future<Classroom> clearTeacherSingleApproverToHod({
+    required AppUser teacher,
+    required Classroom classroom,
+  }) async {
+    if (teacher.role != AppRoles.teacher) {
+      throw ClassroomException('Only class incharge can clear HOD single approver mode.');
+    }
+    if (classroom.teacherId != teacher.id) {
+      throw ClassroomException('This class is not assigned to your account.');
+    }
+
+    final updated = classroom.copyWith(
+      teacherDelegatedSingleApproverId: '',
+      teacherDelegatedSingleApproverName: '',
+      teacherDelegationReason: '',
+      teacherDelegationStartAt: DateTime.fromMillisecondsSinceEpoch(0),
+      teacherDelegationEndAt: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+
+    if (FirebaseBootstrap.isReady) {
+      await _firestore.collection('classrooms').doc(classroom.id).update(<String, dynamic>{
+        'teacherDelegatedSingleApproverId': null,
+        'teacherDelegatedSingleApproverName': null,
+        'teacherDelegationReason': null,
+        'teacherDelegationStartAt': null,
+        'teacherDelegationEndAt': null,
+      });
+      return classroom.copyWith(
+        teacherDelegatedSingleApproverId: '',
+        teacherDelegatedSingleApproverName: '',
+        teacherDelegationReason: '',
+        teacherDelegationStartAt: DateTime.fromMillisecondsSinceEpoch(0),
+        teacherDelegationEndAt: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    }
+
+    final index = _localClassrooms.indexWhere((room) => room.id == classroom.id);
+    if (index >= 0) {
+      _localClassrooms[index] = updated;
+    }
+    return updated;
+  }
+
   Future<List<ClassroomMember>> fetchStudentsForClassroom(
     String classroomId,
   ) async {
@@ -861,6 +1023,49 @@ class ClassroomService {
       length,
       (_) => chars[_random.nextInt(chars.length)],
     ).join();
+  }
+
+  Future<void> removeStudentFromClassroom({
+    required String classroomId,
+    required String studentId,
+    required AppUser remover,
+  }) async {
+    if (FirebaseBootstrap.isReady) {
+      // Verify the remover has permission (teacher of the class or HOD)
+      final classroomDoc = await _firestore
+          .collection('classrooms')
+          .doc(classroomId)
+          .get();
+      if (!classroomDoc.exists) {
+        throw ClassroomException('Classroom not found.');
+      }
+      final classroom = Classroom.fromMap(classroomDoc.data()!, classroomDoc.id);
+
+      final isTeacher = remover.role == AppRoles.teacher && classroom.teacherId == remover.id;
+      final isHod = remover.role == AppRoles.hod && classroom.hodId == remover.id;
+
+      if (!isTeacher && !isHod) {
+        throw ClassroomException('Only class teacher or HOD can remove students.');
+      }
+
+      // Remove the student from classroom_members
+      final memberQuery = await _firestore
+          .collection('classroom_members')
+          .where('classroomId', isEqualTo: classroomId)
+          .where('studentId', isEqualTo: studentId)
+          .limit(1)
+          .get();
+
+      if (memberQuery.docs.isEmpty) {
+        throw ClassroomException('Student is not a member of this class.');
+      }
+
+      await memberQuery.docs.first.reference.delete();
+    } else {
+      // Local mode
+      _localMembers.removeWhere((member) =>
+          member.classroomId == classroomId && member.studentId == studentId);
+    }
   }
 }
 

@@ -119,7 +119,7 @@ class ApprovedPassScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Reg: ${request.registerNumber}',
+                              'Room No: ${request.roomNumber}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: Colors.grey.shade700,
                               ),
